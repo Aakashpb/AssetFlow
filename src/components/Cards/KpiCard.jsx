@@ -2,28 +2,47 @@ import React from 'react';
 import * as LucideIcons from 'lucide-react';
 
 const KpiCard = ({ title, value, icon, color = 'blue', description }) => {
-  // Dynamically resolve icon from string name
   const IconComponent = LucideIcons[icon] || LucideIcons.HelpCircle;
 
   const colorStyles = {
-    blue: { bg: 'bg-primary/10', text: 'text-primary' },
-    teal: { bg: 'bg-secondary/10', text: 'text-secondary' },
-    green: { bg: 'bg-success/10', text: 'text-success' },
-    amber: { bg: 'bg-warning/10', text: 'text-warning' },
-    red: { bg: 'bg-danger/10', text: 'text-danger' },
+    blue: {
+      cardBg: 'from-[#3B82F6]/10 to-[#6366F1]/10',
+      topLine: 'bg-gradient-to-r from-[#3B82F6] to-[#6366F1]',
+      iconBg: 'bg-gradient-to-br from-[#3B82F6] to-[#6366F1]',
+    },
+    green: {
+      cardBg: 'from-[#10B981]/10 to-[#34D399]/10',
+      topLine: 'bg-gradient-to-r from-[#10B981] to-[#34D399]',
+      iconBg: 'bg-gradient-to-br from-[#10B981] to-[#34D399]',
+    },
+    amber: {
+      cardBg: 'from-[#F59E0B]/10 to-[#FBBF24]/10',
+      topLine: 'bg-gradient-to-r from-[#F59E0B] to-[#FBBF24]',
+      iconBg: 'bg-gradient-to-br from-[#F59E0B] to-[#FBBF24]',
+    },
+    purple: {
+      cardBg: 'from-[#8B5CF6]/10 to-[#A78BFA]/10',
+      topLine: 'bg-gradient-to-r from-[#8B5CF6] to-[#A78BFA]',
+      iconBg: 'bg-gradient-to-br from-[#8B5CF6] to-[#A78BFA]',
+    },
   };
 
   const style = colorStyles[color] || colorStyles.blue;
 
   return (
-    <div className="bg-cardBg border border-borderCol hover:border-primary rounded-lg p-5 shadow-sm hover:shadow-md flex items-center gap-4 transition-all duration-200 group">
-      <div className={`w-12 h-12 rounded-md flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${style.bg} ${style.text}`}>
-        <IconComponent className="w-6 h-6" />
+    <div className={`relative overflow-hidden bg-gradient-to-br ${style.cardBg} hover-card-lift rounded-card p-5 pt-7 flex items-center gap-4 group cursor-pointer border border-borderCol shadow-soft`}>
+      {/* Top Accent Line */}
+      <div className={`absolute top-0 left-0 right-0 h-1 ${style.topLine}`} />
+      
+      {/* Circular Gradient Icon Wrapper with white icon */}
+      <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12 ${style.iconBg} text-white`}>
+        <IconComponent className="w-5 h-5" />
       </div>
+      
       <div className="flex flex-col text-left">
-        <span className="text-xs font-semibold text-textSecondary uppercase tracking-wider">{title}</span>
-        <span className="text-2xl font-bold text-textPrimary leading-none mt-1">{value}</span>
-        {description && <span className="text-xs text-textMuted mt-1">{description}</span>}
+        <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">{title}</span>
+        <span className="text-2xl font-bold text-[#1E293B] dark:text-white leading-none mt-1 group-hover:text-primary transition-colors">{value}</span>
+        {description && <span className="text-[10px] text-textMuted mt-1">{description}</span>}
       </div>
     </div>
   );

@@ -179,11 +179,13 @@ const Navbar = ({ toggleSidebarCollapse }) => {
 
           {profileOpen && (
             <div className="absolute right-0 mt-2 bg-cardBg border border-borderCol rounded-md shadow-lg w-56 py-2 z-50">
-              <div className="px-4 py-2 border-b border-borderCol flex flex-col gap-1">
-                <span className="font-semibold text-xs text-textPrimary">Simulation Settings</span>
-                <span className="text-[10px] text-textSecondary">View permission scopes:</span>
+              <div className="px-4 py-2.5 border-b border-borderCol flex flex-col">
+                <span className="font-semibold text-xs text-textPrimary leading-none">{user?.name}</span>
+                <span className="text-[10px] text-textSecondary mt-1 leading-none">{user?.email}</span>
+                <span className="text-[9px] text-[#2563EB] dark:text-sky-400 font-bold uppercase tracking-wider mt-2 bg-primary/10 self-start px-2 py-0.5 rounded-full">{user?.role}</span>
               </div>
               <div className="p-3 border-b border-borderCol">
+                <span className="text-[10px] text-textMuted font-semibold block mb-1">Simulate Permissions Scope:</span>
                 <select 
                   value={user?.role || 'Admin'}
                   onChange={handleRoleChange}
@@ -198,11 +200,11 @@ const Navbar = ({ toggleSidebarCollapse }) => {
               
               <NavLink 
                 to="/profile"
-                className="flex items-center gap-2 px-4 py-2.5 text-sm text-textPrimary hover:bg-hoverBg"
+                className="flex items-center gap-2 px-4 py-2 text-xs text-textPrimary hover:bg-hoverBg"
                 onClick={() => setProfileOpen(false)}
               >
                 <Settings className="w-4 h-4 text-textSecondary" />
-                <span>My Profile</span>
+                <span>My Profile Settings</span>
               </NavLink>
 
               <button 

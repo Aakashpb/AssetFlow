@@ -9,13 +9,16 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: 'var(--primary)',
-          hover: 'var(--primary-hover)',
+          DEFAULT: '#2563eb',
+          hover: '#1d4ed8',
         },
-        secondary: 'var(--secondary)',
-        success: 'var(--success)',
-        warning: 'var(--warning)',
-        danger: 'var(--danger)',
+        secondary: {
+          DEFAULT: '#7c3aed',
+          hover: '#6d28d9',
+        },
+        success: '#10b981',
+        warning: '#f59e0b',
+        danger: '#ef4444',
         mainBg: 'var(--bg-main)',
         sidebarBg: 'var(--bg-sidebar)',
         cardBg: 'var(--bg-card)',
@@ -36,11 +39,16 @@ export default {
         heading: ['Poppins', 'Inter', 'sans-serif'],
       },
       borderRadius: {
+        btn: '14px',
+        card: '20px',
+        input: '12px',
         sm: 'var(--radius-sm)',
         md: 'var(--radius-md)',
         lg: 'var(--radius-lg)',
       },
       boxShadow: {
+        soft: '0 10px 30px rgba(0,0,0,0.08)',
+        softDark: '0 10px 30px rgba(0,0,0,0.3)',
         glow: 'var(--shadow-glow)',
       }
     },
