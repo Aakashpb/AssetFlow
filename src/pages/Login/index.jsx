@@ -5,9 +5,15 @@ import { useToast } from '../../context/ToastContext';
 import BaseModal from '../../components/Modals/BaseModal';
 
 const Login = () => {
-  const { login, loginWithGoogle } = useAuth();
+  const { user, login, loginWithGoogle } = useAuth();
   const { show } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user]);
   
   const [email, setEmail] = useState('alex.vance@assetflow.com');
   const [password, setPassword] = useState('password');
