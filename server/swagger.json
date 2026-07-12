@@ -1,0 +1,89 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "AssetFlow Enterprise Asset & Resource Management API",
+    "version": "1.0.0",
+    "description": "Production REST API documentation for the AssetFlow MVC server, featuring JWT session managers and inventory registries."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Create corporate user profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "example": "Alexander Vance" },
+                  "email": { "type": "string", "example": "alex.vance@assetflow.com" },
+                  "password": { "type": "string", "example": "password" },
+                  "department": { "type": "string", "example": "Executive Office" }
+                },
+                "required": ["name", "email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Verification link sent to corporate address." },
+          "400": { "description": "Validation error or user already exists." }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "alex.vance@assetflow.com" },
+                  "password": { "type": "string", "example": "password" }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Successful sign-in. Returns token." },
+          "400": { "description": "Invalid email/password combo." }
+        }
+      }
+    },
+    "/assets": {
+      "get": {
+        "summary": "Fetch assets registry",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Returns array of registered corporate items." }
+        }
+      }
+    }
+  }
+}

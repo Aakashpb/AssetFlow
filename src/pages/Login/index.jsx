@@ -38,7 +38,7 @@ const Login = () => {
     if (window.google) {
       /* global google */
       google.accounts.id.initialize({
-        client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com", // configure credentials later
+        client_id: "816937494129-qlo971fs0eavbk195e0fu3fkak01pfrh.apps.googleusercontent.com",
         callback: handleGoogleCredentialResponse,
       });
     }
