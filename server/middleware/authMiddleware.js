@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import axios from 'axios';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default-jwt-secret-assetflow-key-phrase';
-const FIREBASE_PROJECT_ID = 'assetflow-244f5';
+const FIREBASE_PROJECT_ID = 'my-project-66efd';
 
 let cachedCertificates = null;
 let cacheExpiry = 0;

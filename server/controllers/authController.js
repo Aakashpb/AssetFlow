@@ -5,7 +5,7 @@ import Role from '../models/Role.js';
 import PasswordReset from '../models/PasswordReset.js';
 import { logActivity } from '../utilities/logger.js';
 
-const FIREBASE_PROJECT_ID = 'assetflow-244f5';
+const FIREBASE_PROJECT_ID = 'my-project-66efd';
 
 let cachedCertificates = null;
 let cacheExpiry = 0;
