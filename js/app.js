@@ -1,0 +1,1779 @@
+/**
+ * AssetFlow ERP - Main Application Controller
+ */
+
+// Global App Instance
+const app = {
+  state: null,
+  currentView: "dashboard",
+  currentRole: "Admin",
+  currentTheme: "light",
+  calendarDate: new Date(),
+  draggedTaskId: null,
+
+  init() {
+    // 1. Initialize State
+    this.loadState();
+    
+    // 2. Set default UI states
+    this.currentTheme = localStorage.getItem("af_theme") || "light";
+    document.documentElement.setAttribute("data-theme", this.currentTheme);
+    this.updateThemeTogglerUI();
+    
+    this.currentRole = localStorage.getItem("af_role") || "Admin";
+    document.getElementById("profile-display-role").textContent = this.currentRole;
+    document.getElementById("profile-role-select").value = this.currentRole;
+    
+    // 3. Initialize components
+    Toast.init();
+    
+    // 4. Bind Global Event Handlers
+    this.bindEvents();
+    
+    // 5. Navigate to initial view
+    this.navigate(this.currentView);
+    
+    // 6. Refresh global counts
+    this.updateGlobalBadges();
+  },
+
+  loadState() {
+    const saved = localStorage.getItem("af_state");
+    if (saved) {
+      try {
+        this.state = JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse state, resetting", e);
+        this.state = JSON.parse(JSON.stringify(window.INITIAL_DATA));
+      }
+    } else {
+      this.state = JSON.parse(JSON.stringify(window.INITIAL_DATA));
+    }
+  },
+
+  saveState() {
+    localStorage.setItem("af_state", JSON.stringify(this.state));
+    this.updateGlobalBadges();
+  },
+
+  updateGlobalBadges() {
+    // Update topbar notifications badge
+    const unreadCount = this.state.notifications.filter(n => !n.read).length;
+    const badge = document.getElementById("notifications-badge");
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount;
+        badge.style.display = "flex";
+      } else {
+        badge.style.display = "none";
+      }
+    }
+  },
+
+  bindEvents() {
+    // Collapsible Sidebar Toggler
+    const collapseBtn = document.getElementById("sidebar-collapse-btn");
+    if (collapseBtn) {
+      collapseBtn.addEventListener("click", () => {
+        document.getElementById("app-wrapper").classList.toggle("collapsed-sidebar");
+      });
+    }
+
+    // Modal Close buttons
+    document.querySelectorAll(".modal-close-btn, .close-modal-footer-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const modal = e.target.closest(".modal-overlay");
+        if (modal) modal.classList.remove("active");
+      });
+    });
+
+    // Theme Toggle
+    const themeBtn = document.getElementById("theme-toggle-btn");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", () => {
+        this.currentTheme = this.currentTheme === "light" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", this.currentTheme);
+        localStorage.setItem("af_theme", this.currentTheme);
+        this.updateThemeTogglerUI();
+        
+        // Re-render charts for theme compatibility
+        if (this.currentView === "dashboard" || this.currentView === "analytics") {
+          AppCharts.renderDashboardCharts(this.currentTheme, this.state.assets, this.state.maintenance);
+        }
+        
+        Toast.show("Theme Updated", `Switched to ${this.currentTheme} mode.`);
+      });
+    }
+
+    // Role Switcher in profile popover
+    const roleSelect = document.getElementById("profile-role-select");
+    if (roleSelect) {
+      roleSelect.addEventListener("change", (e) => {
+        this.currentRole = e.target.value;
+        localStorage.setItem("af_role", this.currentRole);
+        document.getElementById("profile-display-role").textContent = this.currentRole;
+        document.getElementById("profile-popover").classList.remove("active");
+        
+        // Refresh Current View to adapt to role
+        this.navigate(this.currentView);
+        Toast.show("Role Switched", `Logged in as ${this.currentRole}.`, "info");
+      });
+    }
+
+    // Toggle User Profile popover
+    const profileTrigger = document.getElementById("user-profile-menu-trigger");
+    if (profileTrigger) {
+      profileTrigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("profile-popover").classList.toggle("active");
+        document.getElementById("notifications-popover").classList.remove("active");
+      });
+    }
+
+    // Toggle Notifications popover
+    const notifTrigger = document.getElementById("notifications-trigger-btn");
+    if (notifTrigger) {
+      notifTrigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const popover = document.getElementById("notifications-popover");
+        popover.classList.toggle("active");
+        document.getElementById("profile-popover").classList.remove("active");
+        
+        if (popover.classList.contains("active")) {
+          this.renderNotificationsPopover();
+        }
+      });
+    }
+
+    // Global click listener to close popovers
+    document.addEventListener("click", () => {
+      document.getElementById("profile-popover").classList.remove("active");
+      document.getElementById("notifications-popover").classList.remove("active");
+    });
+
+    // Handle Forms Submission
+    // 1. Asset Registration Form
+    const regForm = document.getElementById("asset-registration-form");
+    if (regForm) {
+      regForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleAssetRegistration(e);
+      });
+    }
+
+    // 2. Resource Booking Form
+    const bookForm = document.getElementById("resource-booking-form");
+    if (bookForm) {
+      bookForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleResourceBooking(e);
+      });
+    }
+
+    // 3. Maintenance Ticket Form
+    const mntForm = document.getElementById("maintenance-ticket-form");
+    if (mntForm) {
+      mntForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleCreateMaintenanceTicket(e);
+      });
+    }
+
+    // 4. Employee registration form
+    const empForm = document.getElementById("org-employee-form");
+    if (empForm) {
+      empForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleCreateEmployee(e);
+      });
+    }
+
+    // Global Search Bar Handler
+    const searchBar = document.getElementById("global-search-input");
+    if (searchBar) {
+      searchBar.addEventListener("input", (e) => {
+        const query = e.target.value.toLowerCase();
+        this.handleGlobalSearch(query);
+      });
+    }
+  },
+
+  updateThemeTogglerUI() {
+    const btn = document.getElementById("theme-toggle-btn");
+    if (btn) {
+      if (this.currentTheme === "light") {
+        btn.innerHTML = `<i data-lucide="moon" style="width:18px; height:18px;"></i>`;
+      } else {
+        btn.innerHTML = `<i data-lucide="sun" style="width:18px; height:18px;"></i>`;
+      }
+      lucide.createIcons();
+    }
+  },
+
+  // SPA Navigator / Router
+  navigate(viewId) {
+    this.currentView = viewId;
+    
+    // Hide all view panels and remove active classes from sidebar links
+    document.querySelectorAll(".view-panel").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".sidebar-link").forEach(l => l.classList.remove("active"));
+    
+    // Show current panel and mark sidebar active
+    const panel = document.getElementById(`panel-${viewId}`);
+    if (panel) {
+      panel.classList.add("active");
+    }
+    
+    const sidebarLink = document.querySelector(`.sidebar-link[onclick="app.navigate('${viewId}')"]`);
+    if (sidebarLink) {
+      sidebarLink.classList.add("active");
+    }
+    
+    // Update Breadcrumbs
+    const pageName = viewId.replace("-", " ");
+    document.getElementById("breadcrumb-current").textContent = pageName;
+    document.getElementById("breadcrumb-current").style.textTransform = "capitalize";
+
+    // Clean search inputs
+    const searchBar = document.getElementById("global-search-input");
+    if (searchBar) searchBar.value = "";
+    
+    // Execute panel-specific initializers
+    this.renderView(viewId);
+  },
+
+  renderView(viewId) {
+    switch (viewId) {
+      case "dashboard":
+        this.initDashboardView();
+        break;
+      case "registry":
+        this.initRegistryView();
+        break;
+      case "allocations":
+        this.initAllocationsView();
+        break;
+      case "bookings":
+        this.initBookingsView();
+        break;
+      case "maintenance":
+        this.initMaintenanceView();
+        break;
+      case "audits":
+        this.initAuditsView();
+        break;
+      case "organization":
+        this.initOrganizationView();
+        break;
+      case "analytics":
+        this.initAnalyticsView();
+        break;
+      case "notifications":
+        this.initNotificationsView();
+        break;
+    }
+  },
+
+  // -------------------------------------------------------------
+  // VIEW INITIALIZERS & RENDER LOGIC
+  // -------------------------------------------------------------
+
+  // 1. Dashboard View
+  initDashboardView() {
+    // Dynamic KPI details based on current role permissions
+    const assetsCount = this.state.assets.length;
+    const availableCount = this.state.assets.filter(a => a.status === "Available").length;
+    const allocatedCount = this.state.assets.filter(a => a.status === "Allocated").length;
+    const maintenanceCount = this.state.assets.filter(a => a.status === "Maintenance").length;
+    const bookingsCount = this.state.bookings.length;
+    
+    document.getElementById("dash-kpi-total-assets").textContent = assetsCount;
+    document.getElementById("dash-kpi-available-assets").textContent = availableCount;
+    document.getElementById("dash-kpi-allocated-assets").textContent = allocatedCount;
+    document.getElementById("dash-kpi-maintenance-tasks").textContent = maintenanceCount;
+    
+    // Role-specific dashboard custom details
+    const roleBanner = document.getElementById("dashboard-role-banner");
+    roleBanner.innerHTML = `
+      <div class="card-body" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(13, 148, 136, 0.05)); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+        <div>
+          <h3 style="font-size:1.15rem; font-weight:600;">Welcome back, ${this.currentRole}!</h3>
+          <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:2px;">
+            Here is what's happening with the system assets and departments today.
+          </p>
+        </div>
+        <div style="display:flex; gap:10px;">
+          ${this.currentRole === "Admin" || this.currentRole === "Asset Manager" ? `
+            <button class="btn btn-primary btn-sm" onclick="app.openModal('asset-registration-modal')">
+              <i data-lucide="plus-circle" style="width:14px; height:14px;"></i> Register New Asset
+            </button>
+          ` : ""}
+          <button class="btn btn-secondary btn-sm" onclick="app.navigate('bookings')">
+            <i data-lucide="calendar" style="width:14px; height:14px;"></i> Reserve Resource
+          </button>
+        </div>
+      </div>
+    `;
+    
+    // Render Dashboard Charts
+    AppCharts.renderDashboardCharts(this.currentTheme, this.state.assets, this.state.maintenance);
+    
+    // Render Recent Activity Timeline
+    this.renderRecentActivityTimeline();
+    
+    lucide.createIcons();
+  },
+
+  renderRecentActivityTimeline() {
+    const container = document.getElementById("dashboard-activity-timeline");
+    if (!container) return;
+    
+    // Compile history from all assets to generate a consolidated timeline
+    let activities = [];
+    this.state.assets.forEach(asset => {
+      asset.history.forEach(h => {
+        activities.push({
+          date: h.date,
+          title: h.action,
+          desc: `Asset: ${asset.name} (${asset.tag})`,
+          user: h.user
+        });
+      });
+    });
+    
+    // Sort descending
+    activities.sort((a,b) => new Date(b.date) - new Date(a.date));
+    
+    // Take top 4
+    const recent = activities.slice(0, 4);
+    
+    let html = `<div class="timeline">`;
+    recent.forEach((act, idx) => {
+      const colors = ["primary", "success", "warning", "danger"];
+      const dotColor = colors[idx % colors.length];
+      
+      html += `
+        <div class="timeline-item">
+          <div class="timeline-dot ${dotColor}"></div>
+          <div class="timeline-content">
+            <span class="timeline-time">${act.date} • by ${act.user}</span>
+            <div class="timeline-title">${act.title}</div>
+            <div class="timeline-desc">${act.desc}</div>
+          </div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    
+    container.innerHTML = html;
+  },
+
+  // 2. Registry (Asset Directory) View
+  initRegistryView() {
+    const gridContainer = document.getElementById("asset-registry-grid");
+    if (!gridContainer) return;
+    
+    this.renderAssetCards(this.state.assets);
+  },
+
+  renderAssetCards(assetsArray) {
+    const gridContainer = document.getElementById("asset-registry-grid");
+    if (!gridContainer) return;
+    
+    gridContainer.innerHTML = "";
+    
+    if (assetsArray.length === 0) {
+      gridContainer.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+          <i data-lucide="package-search" class="empty-state-icon"></i>
+          <div class="empty-state-title">No assets match your search</div>
+          <div class="empty-state-desc">Try modifying the search filter or register a new asset.</div>
+        </div>
+      `;
+      lucide.createIcons();
+      return;
+    }
+    
+    assetsArray.forEach(asset => {
+      const badgeClass = `badge-` + asset.status.toLowerCase();
+      
+      // Get user name assigned or Default to Available
+      let assignedUser = "Available";
+      let userAvatar = "AV";
+      if (asset.assignedTo) {
+        const emp = this.state.employees.find(e => e.id === asset.assignedTo);
+        if (emp) {
+          assignedUser = emp.name;
+          userAvatar = emp.avatar;
+        }
+      }
+      
+      const card = document.createElement("div");
+      card.className = "asset-card";
+      card.innerHTML = `
+        <div class="asset-card-image-placeholder" style="background: linear-gradient(135deg, ${asset.colorCode || '#3b82f6'}, #1e1b4b);">
+          <div class="asset-card-tag">${asset.tag}</div>
+          <div class="asset-card-status">
+            <span class="badge ${badgeClass}">${asset.status}</span>
+          </div>
+          <i data-lucide="${this.getCategoryIcon(asset.category)}" style="width:40px; height:40px; opacity:0.3;"></i>
+        </div>
+        <div class="asset-card-details">
+          <h4 class="asset-card-title" title="${asset.name}">${asset.name}</h4>
+          
+          <div class="asset-card-metadata">
+            <span>Cat: ${asset.category}</span>
+            <span>Loc: ${asset.location}</span>
+          </div>
+          
+          <div class="asset-card-footer">
+            <div class="asset-card-user">
+              <div class="asset-card-user-avatar" title="${assignedUser}">${userAvatar}</div>
+              <span style="font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; max-width:120px; white-space:nowrap;">${assignedUser}</span>
+            </div>
+            <div class="asset-card-price">$${asset.cost.toLocaleString()}</div>
+          </div>
+          
+          <div style="display:flex; justify-content:space-between; gap:10px; margin-top:4px;">
+            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="app.showAssetDetails('${asset.id}')">
+              <i data-lucide="eye" style="width:14px; height:14px;"></i> Details
+            </button>
+            
+            ${this.currentRole === "Admin" || this.currentRole === "Asset Manager" ? `
+              <button class="btn btn-secondary btn-sm" title="Edit status" onclick="app.openAssetStatusModal('${asset.id}')">
+                <i data-lucide="edit" style="width:14px; height:14px;"></i>
+              </button>
+            ` : ""}
+          </div>
+        </div>
+      `;
+      gridContainer.appendChild(card);
+    });
+    
+    lucide.createIcons();
+  },
+
+  getCategoryIcon(catName) {
+    const cats = {
+      "IT Hardware": "laptop",
+      "Mobile Devices": "smartphone",
+      "Office Furniture": "armchair",
+      "Vehicles": "car",
+      "AV Equipment": "monitor"
+    };
+    return cats[catName] || "package";
+  },
+
+  // Show detailed single asset lifecycle popup
+  showAssetDetails(assetId) {
+    const asset = this.state.assets.find(a => a.id === assetId);
+    if (!asset) return;
+    
+    const detailsContainer = document.getElementById("asset-detail-popup-body");
+    
+    // Generate QR Code
+    const qrSvg = generateMockQR(`${window.location.origin}?asset=${asset.id}`);
+    
+    // Generate history timeline html
+    let historyHtml = `<div class="timeline" style="margin-top:12px;">`;
+    asset.history.forEach(h => {
+      historyHtml += `
+        <div class="timeline-item">
+          <div class="timeline-dot primary"></div>
+          <div class="timeline-content">
+            <span class="timeline-time">${h.date}</span>
+            <div class="timeline-title">${h.action}</div>
+            <div class="timeline-desc">Triggered by ${h.user}</div>
+          </div>
+        </div>
+      `;
+    });
+    historyHtml += `</div>`;
+    
+    // Fetch user details
+    let userDetailStr = "Unassigned (Stored in inventory)";
+    if (asset.assignedTo) {
+      const emp = this.state.employees.find(e => e.id === asset.assignedTo);
+      if (emp) {
+        userDetailStr = `${emp.name} (${emp.email}) - ${emp.department}`;
+      }
+    }
+    
+    detailsContainer.innerHTML = `
+      <div style="display:grid; grid-template-columns:1fr 120px; gap:20px;">
+        <div>
+          <h3 style="font-size:1.15rem; margin-bottom:8px;">${asset.name}</h3>
+          <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:12px;">Tag ID: <strong>${asset.tag}</strong> | Serial No: <strong>${asset.serial}</strong></p>
+          
+          <table style="width:100%; font-size:0.86rem; border-collapse:collapse;" class="details-table">
+            <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Category</td><td style="padding:6px 0; font-weight:600;">${asset.category}</td></tr>
+            <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Status</td><td style="padding:6px 0;"><span class="badge badge-${asset.status.toLowerCase()}">${asset.status}</span></td></tr>
+            <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Assigned To</td><td style="padding:6px 0; font-weight:600;">${userDetailStr}</td></tr>
+            <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Location</td><td style="padding:6px 0;">${asset.location}</td></tr>
+            <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Purchase Date</td><td style="padding:6px 0;">${asset.purchaseDate}</td></tr>
+            <tr><td style="padding:6px 0; color:var(--text-secondary);">Cost Basis</td><td style="padding:6px 0; font-weight:700;">$${asset.cost.toLocaleString()}</td></tr>
+          </table>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          <div class="qr-container">
+            ${qrSvg}
+            <span style="font-size:0.68rem; font-weight:600; text-transform:uppercase; color:var(--text-secondary);">Scan Asset Tag</span>
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top:20px; border-top:1px solid var(--border-color); padding-top:16px;">
+        <h4 style="font-size:0.95rem; margin-bottom:10px;">Lifecycle History Timeline</h4>
+        ${historyHtml}
+      </div>
+    `;
+    
+    this.openModal("asset-details-popup-modal");
+  },
+
+  // Edit status overlay
+  openAssetStatusModal(assetId) {
+    const asset = this.state.assets.find(a => a.id === assetId);
+    if (!asset) return;
+    
+    document.getElementById("status-edit-asset-id").value = asset.id;
+    document.getElementById("status-edit-asset-title").textContent = asset.name;
+    document.getElementById("status-edit-select").value = asset.status;
+    document.getElementById("status-edit-location").value = asset.location;
+    
+    // Load employee list into switcher
+    const empSelect = document.getElementById("status-edit-employee-select");
+    empSelect.innerHTML = `<option value="">-- Unassigned (Inventory) --</option>`;
+    this.state.employees.forEach(emp => {
+      empSelect.innerHTML += `<option value="${emp.id}">${emp.name} (${emp.department})</option>`;
+    });
+    empSelect.value = asset.assignedTo || "";
+    
+    this.openModal("asset-status-edit-modal");
+  },
+
+  // Save edited asset details
+  saveAssetStatusEdit() {
+    const assetId = document.getElementById("status-edit-asset-id").value;
+    const asset = this.state.assets.find(a => a.id === assetId);
+    if (!asset) return;
+    
+    const newStatus = document.getElementById("status-edit-select").value;
+    const newLocation = document.getElementById("status-edit-location").value;
+    const newEmployee = document.getElementById("status-edit-employee-select").value;
+    
+    // Log history action if something changes
+    let logAction = [];
+    if (asset.status !== newStatus) logAction.push(`Status changed to ${newStatus}`);
+    if (asset.location !== newLocation) logAction.push(`Location moved to ${newLocation}`);
+    if (asset.assignedTo !== newEmployee) {
+      if (newEmployee) {
+        const emp = this.state.employees.find(e => e.id === newEmployee);
+        logAction.push(`Allocated to ${emp.name}`);
+      } else {
+        logAction.push(`Deallocated / Returned to Inventory`);
+      }
+    }
+    
+    if (logAction.length > 0) {
+      asset.status = newStatus;
+      asset.location = newLocation;
+      asset.assignedTo = newEmployee || null;
+      
+      logAction.forEach(act => {
+        asset.history.unshift({
+          date: new Date().toISOString().split('T')[0],
+          action: act,
+          user: this.currentRole
+        });
+      });
+      
+      this.saveState();
+      this.initRegistryView();
+      this.closeModal("asset-status-edit-modal");
+      Toast.show("Asset Status Updated", `Successfully logged changes for ${asset.name}.`);
+    } else {
+      this.closeModal("asset-status-edit-modal");
+    }
+  },
+
+  // Filter asset cards search
+  handleGlobalSearch(query) {
+    if (this.currentView === "registry") {
+      const filtered = this.state.assets.filter(a => 
+        a.name.toLowerCase().includes(query) || 
+        a.tag.toLowerCase().includes(query) || 
+        a.serial.toLowerCase().includes(query) ||
+        a.category.toLowerCase().includes(query) ||
+        a.location.toLowerCase().includes(query)
+      );
+      this.renderAssetCards(filtered);
+    } else if (this.currentView === "organization") {
+      // Filter Employee Directory table
+      const filtered = this.state.employees.filter(e => 
+        e.name.toLowerCase().includes(query) ||
+        e.email.toLowerCase().includes(query) ||
+        e.department.toLowerCase().includes(query) ||
+        e.role.toLowerCase().includes(query)
+      );
+      this.renderEmployeeTable(filtered);
+    }
+  },
+
+  // Filter Registry category selectors
+  filterRegistryByCategory(categoryName) {
+    if (!categoryName) {
+      this.renderAssetCards(this.state.assets);
+      return;
+    }
+    const filtered = this.state.assets.filter(a => a.category === categoryName);
+    this.renderAssetCards(filtered);
+  },
+
+  // 3. Allocations / Transfers View
+  initAllocationsView() {
+    this.renderTransfersTable();
+  },
+
+  renderTransfersTable() {
+    const columns = [
+      { field: "assetName", label: "Asset Name" },
+      { field: "fromEmployee", label: "Current Holder", render: (val) => {
+        if (val === "Inventory") return `<span style="color:var(--text-secondary); font-style:italic;">Inventory</span>`;
+        const emp = this.state.employees.find(e => e.id === val);
+        return emp ? emp.name : val;
+      }},
+      { field: "toEmployeeName", label: "Recipient" },
+      { field: "requestDate", label: "Requested On" },
+      { field: "purpose", label: "Purpose" },
+      { field: "status", label: "Transfer Status", render: (val) => {
+        const badgeClass = val === "Pending Approval" ? "badge-pending" : "badge-available";
+        return `<span class="badge ${badgeClass}">${val}</span>`;
+      }}
+    ];
+    
+    // Admins and Department Heads can approve allocations
+    const canApprove = this.currentRole === "Admin" || this.currentRole === "Department Head" || this.currentRole === "Asset Manager";
+    
+    const actions = canApprove ? [
+      {
+        label: "Approve",
+        icon: "check",
+        class: "btn-primary",
+        onclick: "app.approveTransferRequest",
+        visible: (row) => row.status === "Pending Approval"
+      },
+      {
+        label: "Decline",
+        icon: "x",
+        class: "btn-danger",
+        onclick: "app.declineTransferRequest",
+        visible: (row) => row.status === "Pending Approval"
+      }
+    ] : null;
+
+    renderDataTable("allocations-transfers-table-container", this.state.transferRequests, columns, { actions });
+  },
+
+  // Open asset transfer request popup
+  openTransferModal() {
+    const assetSelect = document.getElementById("transfer-asset-select");
+    const empSelect = document.getElementById("transfer-recipient-select");
+    
+    assetSelect.innerHTML = "";
+    this.state.assets.forEach(a => {
+      assetSelect.innerHTML += `<option value="${a.id}">${a.name} (${a.tag}) [${a.status}]</option>`;
+    });
+    
+    empSelect.innerHTML = "";
+    this.state.employees.forEach(e => {
+      empSelect.innerHTML += `<option value="${e.id}">${e.name} - ${e.department}</option>`;
+    });
+    
+    this.openModal("asset-transfer-modal");
+  },
+
+  // Submit transfer request form
+  submitTransferRequest(event) {
+    event.preventDefault();
+    const assetId = document.getElementById("transfer-asset-select").value;
+    const recipientId = document.getElementById("transfer-recipient-select").value;
+    const purpose = document.getElementById("transfer-purpose").value;
+    
+    const asset = this.state.assets.find(a => a.id === assetId);
+    const recipient = this.state.employees.find(e => e.id === recipientId);
+    
+    if (!asset || !recipient) return;
+    
+    const newRequest = {
+      id: `TRF-${Math.floor(100 + Math.random() * 900)}`,
+      assetId: asset.id,
+      assetName: asset.name,
+      fromEmployee: asset.assignedTo || "Inventory",
+      toEmployee: recipient.id,
+      toEmployeeName: recipient.name,
+      requestDate: new Date().toISOString().split('T')[0],
+      status: "Pending Approval",
+      purpose: purpose
+    };
+    
+    this.state.transferRequests.unshift(newRequest);
+    
+    // Add Notification
+    this.state.notifications.unshift({
+      id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+      title: "Transfer Requested",
+      message: `${recipient.name} requested transfer of ${asset.name}.`,
+      type: "request",
+      time: "Just now",
+      read: false
+    });
+    
+    this.saveState();
+    this.renderTransfersTable();
+    this.closeModal("asset-transfer-modal");
+    Toast.show("Transfer Requested", "Asset allocation request has been routed for department approval.");
+  },
+
+  approveTransferRequest(rowIndex, requestId) {
+    const req = this.state.transferRequests.find(r => r.id === requestId);
+    if (!req) return;
+    
+    const asset = this.state.assets.find(a => a.id === req.assetId);
+    if (asset) {
+      asset.assignedTo = req.toEmployee;
+      asset.status = "Allocated";
+      asset.history.unshift({
+        date: new Date().toISOString().split('T')[0],
+        action: `Allocation approved to ${req.toEmployeeName}`,
+        user: this.currentRole
+      });
+    }
+    
+    req.status = "Approved";
+    
+    // Remove from transfers queue after approval
+    this.state.transferRequests = this.state.transferRequests.filter(r => r.id !== requestId);
+    
+    this.state.notifications.unshift({
+      id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+      title: "Transfer Approved",
+      message: `Transfer of ${req.assetName} to ${req.toEmployeeName} approved.`,
+      type: "success",
+      time: "Just now",
+      read: false
+    });
+    
+    this.saveState();
+    this.renderTransfersTable();
+    Toast.show("Transfer Approved", `Successfully allocated ${req.assetName} to ${req.toEmployeeName}.`);
+  },
+
+  declineTransferRequest(rowIndex, requestId) {
+    const req = this.state.transferRequests.find(r => r.id === requestId);
+    if (!req) return;
+    
+    req.status = "Declined";
+    this.state.transferRequests = this.state.transferRequests.filter(r => r.id !== requestId);
+    
+    this.state.notifications.unshift({
+      id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+      title: "Transfer Declined",
+      message: `Request for ${req.assetName} was declined.`,
+      type: "error",
+      time: "Just now",
+      read: false
+    });
+    
+    this.saveState();
+    this.renderTransfersTable();
+    Toast.show("Transfer Declined", `The allocation request was rejected.`, "warning");
+  },
+
+  // 4. Resource Booking / Calendar View
+  initBookingsView() {
+    this.renderCalendarControls();
+    this.renderBookingCalendar();
+    this.renderBookingsList();
+  },
+
+  renderCalendarControls() {
+    const titleContainer = document.getElementById("calendar-month-year-title");
+    if (!titleContainer) return;
+    
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    titleContainer.textContent = `${monthNames[this.calendarDate.getMonth()]} ${this.calendarDate.getFullYear()}`;
+  },
+
+  changeMonth(dir) {
+    if (dir === 'prev') {
+      this.calendarDate.setMonth(this.calendarDate.getMonth() - 1);
+    } else {
+      this.calendarDate.setMonth(this.calendarDate.getMonth() + 1);
+    }
+    this.renderCalendarControls();
+    this.renderBookingCalendar();
+  },
+
+  renderBookingCalendar() {
+    renderCalendarGrid(
+      "calendar-grid-container", 
+      this.state.bookings, 
+      this.calendarDate, 
+      this.state.resources, 
+      (dateStr) => this.openBookingModal(dateStr)
+    );
+  },
+
+  renderBookingsList() {
+    const listContainer = document.getElementById("active-bookings-list-container");
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = "";
+    
+    if (this.state.bookings.length === 0) {
+      listContainer.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-secondary); font-size:0.84rem;">No active bookings.</div>`;
+      return;
+    }
+    
+    this.state.bookings.forEach(b => {
+      const card = document.createElement("div");
+      card.className = "timeline-item";
+      card.style.paddingBottom = "12px";
+      card.style.borderBottom = "1px solid var(--border-color)";
+      
+      const st = new Date(b.startTime);
+      const et = new Date(b.endTime);
+      
+      card.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:2px; width:100%;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:0.86rem; color:var(--text-primary);">${b.resourceName}</strong>
+            ${this.currentRole === "Admin" || b.userId === "EMP-001" ? `
+              <button class="btn btn-sm btn-secondary" style="padding:2px 6px; font-size:0.75rem;" onclick="app.cancelBooking('${b.id}')">Cancel</button>
+            ` : ""}
+          </div>
+          <span style="font-size:0.78rem; color:var(--text-secondary);">
+            User: <strong>${b.userName}</strong> | Date: ${st.toLocaleDateString()}
+          </span>
+          <span style="font-size:0.74rem; color:var(--text-muted);">
+            Time: ${st.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${et.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+          </span>
+          <p style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">Purpose: "${b.purpose}"</p>
+        </div>
+      `;
+      listContainer.appendChild(card);
+    });
+  },
+
+  openBookingModal(dateStr = "") {
+    const resSelect = document.getElementById("booking-resource-select");
+    resSelect.innerHTML = "";
+    
+    this.state.resources.forEach(r => {
+      resSelect.innerHTML += `<option value="${r.id}">${r.name} (${r.type})</option>`;
+    });
+    
+    if (dateStr) {
+      document.getElementById("booking-start-date").value = dateStr;
+      document.getElementById("booking-end-date").value = dateStr;
+    } else {
+      const todayStr = new Date().toISOString().split('T')[0];
+      document.getElementById("booking-start-date").value = todayStr;
+      document.getElementById("booking-end-date").value = todayStr;
+    }
+    
+    this.openModal("resource-booking-modal");
+  },
+
+  handleResourceBooking(e) {
+    const resourceId = document.getElementById("booking-resource-select").value;
+    const startDate = document.getElementById("booking-start-date").value;
+    const startTime = document.getElementById("booking-start-time").value;
+    const endDate = document.getElementById("booking-end-date").value;
+    const endTime = document.getElementById("booking-end-time").value;
+    const purpose = document.getElementById("booking-purpose").value;
+    
+    const startDateTime = `${startDate}T${startTime}:00`;
+    const endDateTime = `${endDate}T${endTime}:00`;
+    
+    // Check validation: End must be after Start
+    const stObj = new Date(startDateTime);
+    const etObj = new Date(endDateTime);
+    
+    if (stObj >= etObj) {
+      Toast.show("Booking Conflict", "End Date/Time must be after Start Date/Time.", "error");
+      return;
+    }
+    
+    // Check overlap validation against existing database bookings
+    const overlapping = this.state.bookings.find(b => {
+      if (b.resourceId !== resourceId) return false;
+      const bStart = new Date(b.startTime);
+      const bEnd = new Date(b.endTime);
+      return (stObj < bEnd && etObj > bStart);
+    });
+    
+    if (overlapping) {
+      // Overlap detected! Block reservation and alert.
+      this.state.notifications.unshift({
+        id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+        title: "Booking Prevented",
+        message: `Overlapping booking blocked on ${overlapping.resourceName}.`,
+        type: "error",
+        time: "Just now",
+        read: false
+      });
+      this.saveState();
+      
+      Toast.show("Reservation Overlap", `This resource is already booked by ${overlapping.userName} from ${overlapping.startTime.split('T')[1].substring(0, 5)} to ${overlapping.endTime.split('T')[1].substring(0, 5)}. Please choose a different window.`, "error");
+      return;
+    }
+    
+    // Create booking
+    const resource = this.state.resources.find(r => r.id === resourceId);
+    
+    // Mock user identification (use first employee for simulation)
+    const mockUser = this.state.employees[0]; // Admin Vance
+    
+    const newBooking = {
+      id: `BKG-${Math.floor(100 + Math.random() * 900)}`,
+      resourceId: resourceId,
+      resourceName: resource ? resource.name : "Resource",
+      userId: mockUser.id,
+      userName: mockUser.name,
+      startTime: startDateTime,
+      endTime: endDateTime,
+      purpose: purpose
+    };
+    
+    this.state.bookings.push(newBooking);
+    
+    // Trigger Success Notification
+    this.state.notifications.unshift({
+      id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+      title: "Resource Reserved",
+      message: `${resource.name} reserved successfully.`,
+      type: "success",
+      time: "Just now",
+      read: false
+    });
+    
+    this.saveState();
+    this.initBookingsView();
+    this.closeModal("resource-booking-modal");
+    Toast.show("Resource Booked", `Successfully reserved ${newBooking.resourceName}.`);
+  },
+
+  showBookingDetails(bookingId) {
+    const booking = this.state.bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+    
+    const st = new Date(booking.startTime);
+    const et = new Date(booking.endTime);
+    
+    alert(`Resource Booking Details:\n\nResource: ${booking.resourceName}\nBooked By: ${booking.userName}\nStart: ${st.toLocaleString()}\nEnd: ${et.toLocaleString()}\nPurpose: ${booking.purpose}`);
+  },
+
+  cancelBooking(bookingId) {
+    const booking = this.state.bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+    
+    if (confirm(`Are you sure you want to cancel the reservation for ${booking.resourceName}?`)) {
+      this.state.bookings = this.state.bookings.filter(b => b.id !== bookingId);
+      
+      this.state.notifications.unshift({
+        id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+        title: "Booking Cancelled",
+        message: `${booking.resourceName} reservation was cancelled.`,
+        type: "info",
+        time: "Just now",
+        read: false
+      });
+      
+      this.saveState();
+      this.initBookingsView();
+      Toast.show("Booking Cancelled", "The reservation slot has been released.");
+    }
+  },
+
+  // 5. Maintenance Kanban View
+  initMaintenanceView() {
+    renderKanbanBoard(
+      "maintenance-kanban-board", 
+      this.state.maintenance, 
+      "app.moveMaintenanceTicket", 
+      "app.showMaintenanceDetails"
+    );
+  },
+
+  showMaintenanceDetails(ticketId) {
+    const task = this.state.maintenance.find(m => m.id === ticketId);
+    if (!task) return;
+    
+    const asset = this.state.assets.find(a => a.id === task.assetId);
+    
+    const content = document.getElementById("maintenance-details-popup-body");
+    content.innerHTML = `
+      <h3 style="font-size:1.15rem; margin-bottom:8px;">${task.title}</h3>
+      <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:12px;">Task ID: <strong>${task.id}</strong> | Asset ID: <strong>${task.assetId}</strong></p>
+      
+      <table style="width:100%; font-size:0.86rem; border-collapse:collapse; margin-bottom:16px;" class="details-table">
+        <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Asset Name</td><td style="padding:6px 0; font-weight:600;">${task.assetName}</td></tr>
+        <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Severity</td><td style="padding:6px 0;"><span class="severity-badge severity-${task.severity.toLowerCase()}">${task.severity}</span></td></tr>
+        <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Workflow Stage</td><td style="padding:6px 0; font-weight:600;">${task.stage}</td></tr>
+        <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Repair Crew</td><td style="padding:6px 0;">${task.assignedTo}</td></tr>
+        <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Date Created</td><td style="padding:6px 0;">${task.dateCreated}</td></tr>
+        <tr style="border-bottom:1px solid var(--border-color);"><td style="padding:6px 0; color:var(--text-secondary);">Estimated Cost</td><td style="padding:6px 0; font-weight:700;">$${task.cost}</td></tr>
+        <tr><td style="padding:6px 0; color:var(--text-secondary);">Est. Downtime</td><td style="padding:6px 0; font-weight:600;">${task.downtime} days</td></tr>
+      </table>
+      
+      <div style="border-top:1px solid var(--border-color); padding-top:12px;">
+        <h4 style="font-size:0.92rem; margin-bottom:4px;">Diagnostic Notes / description</h4>
+        <p style="font-size:0.84rem; color:var(--text-secondary); line-height:1.4;">${task.description}</p>
+      </div>
+    `;
+    this.openModal("maintenance-details-popup-modal");
+  },
+
+  openMaintenanceTicketModal() {
+    const assetSelect = document.getElementById("maintenance-asset-select");
+    assetSelect.innerHTML = "";
+    this.state.assets.forEach(a => {
+      assetSelect.innerHTML += `<option value="${a.id}">${a.name} (${a.tag})</option>`;
+    });
+    this.openModal("maintenance-ticket-modal");
+  },
+
+  handleCreateMaintenanceTicket(e) {
+    const assetId = document.getElementById("maintenance-asset-select").value;
+    const title = document.getElementById("maintenance-title").value;
+    const severity = document.getElementById("maintenance-severity").value;
+    const cost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
+    const downtime = parseInt(document.getElementById("maintenance-downtime").value) || 0;
+    const assigned = document.getElementById("maintenance-assigned").value;
+    const desc = document.getElementById("maintenance-desc").value;
+    
+    const asset = this.state.assets.find(a => a.id === assetId);
+    if (!asset) return;
+    
+    const newTicket = {
+      id: `MNT-${Math.floor(100 + Math.random() * 900)}`,
+      assetId: assetId,
+      assetName: asset.name,
+      title: title,
+      description: desc,
+      severity: severity,
+      stage: "Backlog",
+      cost: cost,
+      downtime: downtime,
+      dateCreated: new Date().toISOString().split('T')[0],
+      assignedTo: assigned
+    };
+    
+    this.state.maintenance.push(newTicket);
+    
+    // Set asset status to maintenance
+    asset.status = "Maintenance";
+    asset.history.unshift({
+      date: new Date().toISOString().split('T')[0],
+      action: `Maintenance Ticket Created: ${title}`,
+      user: this.currentRole
+    });
+    
+    this.saveState();
+    this.initMaintenanceView();
+    this.closeModal("maintenance-ticket-modal");
+    Toast.show("Ticket Created", `Logged maintenance task for ${asset.name}.`);
+  },
+
+  // Manual board navigation action buttons
+  moveMaintenanceTicket(ticketId, direction) {
+    const task = this.state.maintenance.find(m => m.id === ticketId);
+    if (!task) return;
+    
+    const columns = ["Backlog", "Scheduled", "In Progress", "Review", "Completed"];
+    const idx = columns.indexOf(task.stage);
+    
+    let newIdx = idx;
+    if (direction === 'prev' && idx > 0) newIdx--;
+    if (direction === 'next' && idx < columns.length - 1) newIdx++;
+    
+    if (newIdx !== idx) {
+      task.stage = columns[newIdx];
+      
+      // If completed, move asset status back to available
+      if (task.stage === "Completed") {
+        const asset = this.state.assets.find(a => a.id === task.assetId);
+        if (asset) {
+          asset.status = "Available";
+          asset.history.unshift({
+            date: new Date().toISOString().split('T')[0],
+            action: `Maintenance completed: ${task.title}`,
+            user: this.currentRole
+          });
+        }
+      }
+      
+      this.saveState();
+      this.initMaintenanceView();
+      Toast.show("Workflow Advanced", `Moved task to ${task.stage}.`);
+    }
+  },
+
+  // HTML5 Drag and Drop Kanban controls
+  handleKanbanDragStart(event, taskId) {
+    this.draggedTaskId = taskId;
+    event.dataTransfer.setData("text/plain", taskId);
+    event.dataTransfer.effectAllowed = "move";
+  },
+
+  handleKanbanDrop(event, targetStage) {
+    event.preventDefault();
+    const taskId = this.draggedTaskId || event.dataTransfer.getData("text/plain");
+    if (!taskId) return;
+    
+    const task = this.state.maintenance.find(m => m.id === taskId);
+    if (task && task.stage !== targetStage) {
+      task.stage = targetStage;
+      
+      if (targetStage === "Completed") {
+        const asset = this.state.assets.find(a => a.id === task.assetId);
+        if (asset) {
+          asset.status = "Available";
+          asset.history.unshift({
+            date: new Date().toISOString().split('T')[0],
+            action: `Maintenance completed: ${task.title} (Via Board Drag)`,
+            user: this.currentRole
+          });
+        }
+      }
+      
+      this.saveState();
+      this.initMaintenanceView();
+      Toast.show("Task Moved", `Moved to ${targetStage}.`);
+    }
+    this.draggedTaskId = null;
+  },
+
+  // 6. Audits View
+  initAuditsView() {
+    this.renderAuditsDashboard();
+  },
+
+  renderAuditsDashboard() {
+    const listContainer = document.getElementById("audits-list-container");
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = "";
+    
+    this.state.audits.forEach(audit => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginBottom = "16px";
+      
+      const badgeClass = audit.status === "Completed" ? "badge-available" : "badge-pending";
+      
+      card.innerHTML = `
+        <div class="card-header">
+          <div>
+            <span class="badge ${badgeClass}" style="margin-bottom:6px;">${audit.status}</span>
+            <h4 style="font-size:1rem;">${audit.name}</h4>
+            <span style="font-size:0.78rem; color:var(--text-secondary);">Scheduled Date: ${audit.scheduledDate}</span>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:1.15rem; font-weight:700; color:var(--primary);">${audit.progress}%</div>
+            <span style="font-size:0.74rem; color:var(--text-muted);">${audit.checkedCount} / ${audit.totalCount} Verified</span>
+          </div>
+        </div>
+        <div class="card-body" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div>
+            <span style="font-size:0.82rem; color:var(--text-secondary);">Discrepancies reported: <strong>${audit.discrepancies.length}</strong></span>
+          </div>
+          <div>
+            <button class="btn btn-secondary btn-sm" onclick="app.loadActiveAudit('${audit.id}')">
+              <i data-lucide="${audit.status === 'Completed' ? 'eye' : 'check-square'}" style="width:14px; height:14px;"></i> 
+              ${audit.status === 'Completed' ? 'View Results' : 'Perform Audit'}
+            </button>
+          </div>
+        </div>
+      `;
+      listContainer.appendChild(card);
+    });
+    
+    lucide.createIcons();
+  },
+
+  // Load selected checklist screen details
+  loadActiveAudit(auditId) {
+    const audit = this.state.audits.find(a => a.id === auditId);
+    if (!audit) return;
+    
+    const panel = document.getElementById("panel-audits");
+    
+    // Switch the local view context within the audit panel to show sheet details
+    let detailHtml = `
+      <div class="page-header">
+        <div class="page-title-group">
+          <h2 class="page-title">${audit.name}</h2>
+          <p class="page-subtitle">Interactive Audit Checklist & Discrepancies verification</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="app.initAuditsView()">
+          <i data-lucide="arrow-left" style="width:14px; height:14px;"></i> Back to Audits list
+        </button>
+      </div>
+      
+      <div class="audit-details-container">
+        <!-- Checklist panel -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Verification Checklist</span>
+            <span style="font-size:0.8rem; color:var(--text-secondary);">${audit.checkedCount} / ${audit.totalCount} completed</span>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div style="max-height:480px; overflow-y:auto;" id="audit-checklist-items-box">
+    `;
+    
+    audit.checklist.forEach((item, index) => {
+      const asset = this.state.assets.find(a => a.id === item.assetId);
+      if (!asset) return;
+      
+      const badgeClass = item.status === "Verified" ? "badge-available" : item.status === "Discrepancy" ? "badge-maintenance" : "badge-pending";
+      
+      detailHtml += `
+        <div class="audit-checklist-item">
+          <div class="audit-item-info">
+            <span style="font-weight:600; font-size:0.88rem;">${asset.name}</span>
+            <span style="font-size:0.78rem; color:var(--text-secondary);">Tag: ${asset.tag} | Expected Loc: ${asset.location}</span>
+            ${item.notes ? `<p style="font-size:0.75rem; color:var(--primary); margin-top:2px;">Notes: "${item.notes}"</p>` : ""}
+          </div>
+          <div class="audit-item-actions">
+            ${audit.status !== "Completed" ? `
+              <button class="btn btn-sm btn-primary" style="padding:2px 8px; font-size:0.75rem; background-color:var(--success);" onclick="app.verifyAuditItem('${audit.id}', '${item.assetId}', 'Verified')">Verify</button>
+              <button class="btn btn-sm btn-danger" style="padding:2px 8px; font-size:0.75rem;" onclick="app.flagAuditDiscrepancy('${audit.id}', '${item.assetId}')">Flag Discrepancy</button>
+            ` : `
+              <span class="badge ${badgeClass}">${item.status}</span>
+            `}
+          </div>
+        </div>
+      `;
+    });
+    
+    detailHtml += `
+            </div>
+          </div>
+          ${audit.status !== "Completed" ? `
+            <div class="card-footer" style="padding:16px; border-top:1px solid var(--border-color); display:flex; justify-content:flex-end;">
+              <button class="btn btn-primary" onclick="app.submitAuditReport('${audit.id}')">Submit Final Audit Report</button>
+            </div>
+          ` : ""}
+        </div>
+        
+        <!-- Discrepancy report stats panel -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Discrepancy Report Summary</span>
+          </div>
+          <div class="card-body">
+            <div style="text-align:center; padding:16px 0; border-bottom:1px solid var(--border-color); margin-bottom:16px;">
+              <div style="font-size:2rem; font-weight:700; color:var(--danger);">${audit.discrepancies.length}</div>
+              <span style="font-size:0.8rem; color:var(--text-secondary);">Flagged issues</span>
+            </div>
+            
+            <h5 style="font-size:0.88rem; margin-bottom:8px;">Discrepancies Logs</h5>
+            <div style="display:flex; flex-direction:column; gap:8px;" id="audit-discrepancies-summary-box">
+    `;
+    
+    if (audit.discrepancies.length === 0) {
+      detailHtml += `<div style="font-size:0.8rem; text-align:center; color:var(--text-secondary); padding:8px;">No issues flagged in this audit session.</div>`;
+    } else {
+      audit.discrepancies.forEach(d => {
+        detailHtml += `
+          <div style="padding:8px; border:1px solid rgba(239, 68, 68, 0.2); background-color:rgba(239, 68, 68, 0.02); border-radius:var(--radius-md); font-size:0.8rem;">
+            <strong style="color:var(--danger);">${d.issue}</strong>
+            <p style="margin-top:2px;">Asset: ${d.assetName}</p>
+            <p style="color:var(--text-secondary); font-style:italic;">"${d.details}"</p>
+          </div>
+        `;
+      });
+    }
+    
+    detailHtml += `
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    panel.innerHTML = detailHtml;
+    lucide.createIcons();
+  },
+
+  verifyAuditItem(auditId, assetId, status, notes = "") {
+    const audit = this.state.audits.find(a => a.id === auditId);
+    if (!audit) return;
+    
+    const checklistItem = audit.checklist.find(c => c.assetId === assetId);
+    if (checklistItem) {
+      checklistItem.checked = true;
+      checklistItem.status = status;
+      if (notes) checklistItem.notes = notes;
+      
+      // Update totals
+      const checked = audit.checklist.filter(c => c.checked).length;
+      audit.checkedCount = checked;
+      audit.progress = Math.round((checked / audit.totalCount) * 1000) / 10;
+      
+      this.saveState();
+      this.loadActiveAudit(auditId);
+      Toast.show("Asset Verified", "State updated in checklist.");
+    }
+  },
+
+  flagAuditDiscrepancy(auditId, assetId) {
+    document.getElementById("audit-discrepancy-audit-id").value = auditId;
+    document.getElementById("audit-discrepancy-asset-id").value = assetId;
+    
+    const asset = this.state.assets.find(a => a.id === assetId);
+    document.getElementById("audit-discrepancy-asset-name").textContent = asset ? asset.name : "Asset";
+    
+    this.openModal("audit-discrepancy-modal");
+  },
+
+  submitAuditDiscrepancy(e) {
+    e.preventDefault();
+    const auditId = document.getElementById("audit-discrepancy-audit-id").value;
+    const assetId = document.getElementById("audit-discrepancy-asset-id").value;
+    const issueType = document.getElementById("audit-discrepancy-issue-type").value;
+    const details = document.getElementById("audit-discrepancy-details").value;
+    
+    const audit = this.state.audits.find(a => a.id === auditId);
+    const asset = this.state.assets.find(a => a.id === assetId);
+    
+    if (!audit || !asset) return;
+    
+    // Add discrepancy
+    audit.discrepancies.push({
+      assetId: assetId,
+      assetName: asset.name,
+      issue: issueType,
+      details: details
+    });
+    
+    // Adjust asset status in main registry if required (e.g. Damage -> maintenance, Missing -> retired/unavailable)
+    if (issueType === "Damaged / Needs Maintenance") {
+      asset.status = "Maintenance";
+      asset.history.unshift({
+        date: new Date().toISOString().split('T')[0],
+        action: "Flagged damaged during audit",
+        user: this.currentRole
+      });
+    }
+    
+    this.verifyAuditItem(auditId, assetId, "Discrepancy", `${issueType}: ${details}`);
+    this.closeModal("audit-discrepancy-modal");
+    document.getElementById("audit-discrepancy-form").reset();
+  },
+
+  submitAuditReport(auditId) {
+    const audit = this.state.audits.find(a => a.id === auditId);
+    if (!audit) return;
+    
+    if (confirm("Are you sure you want to finalize this audit report? It will mark the audit session as completed.")) {
+      audit.status = "Completed";
+      audit.progress = 100;
+      
+      // Ensure all items are marked checked
+      audit.checklist.forEach(item => {
+        if (!item.checked) {
+          item.checked = true;
+          item.status = "Verified";
+        }
+      });
+      
+      audit.checkedCount = audit.totalCount;
+      
+      // Notify
+      this.state.notifications.unshift({
+        id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+        title: "Audit Finalized",
+        message: `${audit.name} has been signed off. ${audit.discrepancies.length} issues reported.`,
+        type: "success",
+        time: "Just now",
+        read: false
+      });
+      
+      this.saveState();
+      this.initAuditsView();
+      Toast.show("Audit Complete", "The audit report has been submitted to IT Operations.");
+    }
+  },
+
+  // 7. Organization Setup View
+  initOrganizationView() {
+    this.renderDepartmentsGrid();
+    this.renderCategoriesGrid();
+    this.renderEmployeeTable(this.state.employees);
+  },
+
+  renderDepartmentsGrid() {
+    const grid = document.getElementById("org-departments-grid");
+    if (!grid) return;
+    
+    grid.innerHTML = "";
+    this.state.departments.forEach(d => {
+      const card = document.createElement("div");
+      card.className = "kpi-card";
+      card.innerHTML = `
+        <div class="kpi-icon-wrapper blue"><i data-lucide="building"></i></div>
+        <div class="kpi-details">
+          <span class="kpi-label">${d.name}</span>
+          <span class="kpi-value" style="font-size:0.95rem; font-weight:600; margin-top:2px;">Head: ${d.head}</span>
+          <span class="kpi-meta">Budget: $${d.budget.toLocaleString()}</span>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  },
+
+  renderCategoriesGrid() {
+    const grid = document.getElementById("org-categories-grid");
+    if (!grid) return;
+    
+    grid.innerHTML = "";
+    this.state.categories.forEach(c => {
+      const card = document.createElement("div");
+      card.className = "kpi-card";
+      card.innerHTML = `
+        <div class="kpi-icon-wrapper teal"><i data-lucide="${this.getCategoryIcon(c.name)}"></i></div>
+        <div class="kpi-details">
+          <span class="kpi-label">${c.name}</span>
+          <span class="kpi-value" style="font-size:1.15rem; font-weight:700; margin-top:2px;">${c.count} assets</span>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  },
+
+  renderEmployeeTable(employeesArray) {
+    const columns = [
+      { field: "avatar", label: "Avatar", render: (val, row) => `<div class="user-avatar" style="width:28px; height:28px; font-size:0.75rem;">${val}</div>` },
+      { field: "name", label: "Full Name" },
+      { field: "email", label: "Email Address" },
+      { field: "department", label: "Department" },
+      { field: "role", label: "System Role" }
+    ];
+    
+    const actions = this.currentRole === "Admin" ? [
+      {
+        label: "Remove",
+        icon: "trash-2",
+        class: "btn-danger",
+        onclick: "app.deleteEmployee"
+      }
+    ] : null;
+
+    renderDataTable("org-employees-table-container", employeesArray, columns, { actions });
+  },
+
+  handleCreateEmployee(e) {
+    const name = document.getElementById("emp-name").value;
+    const email = document.getElementById("emp-email").value;
+    const dept = document.getElementById("emp-dept").value;
+    const role = document.getElementById("emp-role").value;
+    
+    const avatar = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    
+    const newEmp = {
+      id: `EMP-${Math.floor(100 + Math.random() * 900)}`,
+      name: name,
+      email: email,
+      role: role,
+      department: dept,
+      avatar: avatar
+    };
+    
+    this.state.employees.push(newEmp);
+    this.saveState();
+    this.initOrganizationView();
+    this.closeModal("org-employee-modal");
+    document.getElementById("org-employee-form").reset();
+    Toast.show("Employee Added", `${name} added to ${dept} team.`);
+  },
+
+  deleteEmployee(rowIndex, employeeId) {
+    const emp = this.state.employees.find(e => e.id === employeeId);
+    if (!emp) return;
+    
+    if (confirm(`Are you sure you want to remove ${emp.name} from the directory?`)) {
+      this.state.employees = this.state.employees.filter(e => e.id !== employeeId);
+      this.saveState();
+      this.initOrganizationView();
+      Toast.show("Employee Removed", "Employee record removed.");
+    }
+  },
+
+  // 8. Analytics Screen Renders
+  initAnalyticsView() {
+    // Analytics panel uses same Chart.js rendering options
+    AppCharts.renderDashboardCharts(this.currentTheme, this.state.assets, this.state.maintenance);
+    
+    // Fill in summary details card
+    const totalCost = this.state.assets.reduce((sum, a) => sum + a.cost, 0);
+    const totalRepairCost = this.state.maintenance.reduce((sum, m) => sum + m.cost, 0);
+    const downtimeSum = this.state.maintenance.reduce((sum, m) => sum + m.downtime, 0);
+    
+    document.getElementById("analytics-summary-cost-basis").textContent = `$${totalCost.toLocaleString()}`;
+    document.getElementById("analytics-summary-maintenance-expenses").textContent = `$${totalRepairCost.toLocaleString()}`;
+    document.getElementById("analytics-summary-total-downtime").textContent = `${downtimeSum} Days`;
+  },
+
+  // Export full inventory database to CSV text file download
+  exportInventoryCSV() {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Asset ID,Asset Name,Asset Tag,Serial Number,Category,Status,Location,Cost Basis,Purchase Date,Assigned Employee ID\r\n";
+    
+    this.state.assets.forEach(a => {
+      const row = [
+        a.id,
+        `"${a.name.replace(/"/g, '""')}"`,
+        a.tag,
+        a.serial,
+        a.category,
+        a.status,
+        `"${a.location.replace(/"/g, '""')}"`,
+        a.cost,
+        a.purchaseDate,
+        a.assignedTo || "None"
+      ].join(",");
+      csvContent += row + "\r\n";
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `AssetFlow_Inventory_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    
+    link.click();
+    document.body.removeChild(link);
+    Toast.show("Export Complete", "CSV Inventory file downloaded.");
+  },
+
+  // 9. Full Notifications Panel
+  initNotificationsView() {
+    const list = document.getElementById("notifications-view-list");
+    if (!list) return;
+    
+    list.innerHTML = "";
+    if (this.state.notifications.length === 0) {
+      list.innerHTML = `<div class="empty-state"><i data-lucide="bell-off" class="empty-state-icon"></i><div class="empty-state-title">No notifications</div></div>`;
+      lucide.createIcons();
+      return;
+    }
+    
+    this.state.notifications.forEach(n => {
+      let icon = "bell";
+      if (n.type === "success") icon = "check-circle";
+      if (n.type === "warning") icon = "alert-triangle";
+      if (n.type === "error") icon = "alert-circle";
+      
+      const item = document.createElement("div");
+      item.className = "card";
+      item.style.marginBottom = "10px";
+      item.style.opacity = n.read ? "0.75" : "1";
+      item.innerHTML = `
+        <div class="card-body" style="display:flex; align-items:center; gap:16px; padding:16px;">
+          <div class="kpi-icon-wrapper ${n.type === 'success' ? 'green' : n.type === 'error' ? 'red' : n.type === 'warning' ? 'amber' : 'blue'}" style="width:36px; height:36px;">
+            <i data-lucide="${icon}" style="width:16px; height:16px;"></i>
+          </div>
+          <div style="flex:1;">
+            <div style="font-weight:600; font-size:0.88rem; display:flex; justify-content:space-between;">
+              <span>${n.title}</span>
+              <span style="font-size:0.72rem; color:var(--text-muted); font-weight:400;">${n.time}</span>
+            </div>
+            <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:2px;">${n.message}</p>
+          </div>
+          ${!n.read ? `<button class="btn btn-secondary btn-sm" style="padding:2px 6px; font-size:0.72rem;" onclick="app.markNotificationAsRead('${n.id}')">Mark Read</button>` : ""}
+        </div>
+      `;
+      list.appendChild(item);
+    });
+    
+    lucide.createIcons();
+  },
+
+  // Mark single notification read
+  markNotificationAsRead(notifId) {
+    const notif = this.state.notifications.find(n => n.id === notifId);
+    if (notif) {
+      notif.read = true;
+      this.saveState();
+      
+      if (this.currentView === "notifications") {
+        this.initNotificationsView();
+      }
+      this.updateGlobalBadges();
+    }
+  },
+
+  // Header notifications popover renderer
+  renderNotificationsPopover() {
+    const box = document.getElementById("notifications-popover-list");
+    if (!box) return;
+    
+    box.innerHTML = "";
+    
+    const unread = this.state.notifications.filter(n => !n.read);
+    const items = unread.length > 0 ? unread.slice(0, 4) : this.state.notifications.slice(0, 4);
+    
+    if (items.length === 0) {
+      box.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-secondary); font-size:0.8rem;">Inbox is empty</div>`;
+      return;
+    }
+    
+    items.forEach(n => {
+      let icon = "bell";
+      if (n.type === "success") icon = "check-circle";
+      if (n.type === "error") icon = "alert-circle";
+      
+      box.innerHTML += `
+        <div style="display:flex; gap:10px; padding:10px; border-bottom:1px solid var(--border-color); font-size:0.8rem; cursor:pointer;" onclick="app.navigate('notifications')">
+          <i data-lucide="${icon}" style="width:16px; height:16px; color:var(--primary); margin-top:2px; flex-shrink:0;"></i>
+          <div>
+            <div style="font-weight:600;">${n.title}</div>
+            <div style="color:var(--text-secondary); font-size:0.74rem; margin-top:1px;">${n.message}</div>
+            <span style="font-size:0.68rem; color:var(--text-muted);">${n.time}</span>
+          </div>
+        </div>
+      `;
+    });
+    
+    lucide.createIcons();
+  },
+
+  clearAllNotifications() {
+    this.state.notifications = [];
+    this.saveState();
+    if (this.currentView === "notifications") this.initNotificationsView();
+    this.updateGlobalBadges();
+    Toast.show("Inbox Cleared", "Cleared all notifications logs.");
+  },
+
+  // -------------------------------------------------------------
+  // MODAL CORE CONTROLS
+  // -------------------------------------------------------------
+  openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.add("active");
+    }
+  },
+
+  closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.remove("active");
+    }
+  },
+
+  // Create new registered asset logic
+  handleAssetRegistration(e) {
+    const name = document.getElementById("reg-name").value;
+    const cat = document.getElementById("reg-category").value;
+    const serial = document.getElementById("reg-serial").value;
+    const loc = document.getElementById("reg-location").value;
+    const cost = parseFloat(document.getElementById("reg-cost").value) || 0;
+    const purchaseDate = document.getElementById("reg-purchase-date").value;
+    
+    // Generate tag ID dynamically
+    const catCodes = {
+      "IT Hardware": "LAP",
+      "Mobile Devices": "MOB",
+      "Office Furniture": "FUR",
+      "Vehicles": "VEH",
+      "AV Equipment": "AV"
+    };
+    const prefix = catCodes[cat] || "AST";
+    const randId = Math.floor(1000 + Math.random() * 9000);
+    const tag = `AF-${prefix}-${randId}`;
+    
+    const newAsset = {
+      id: `AST-${randId}`,
+      name: name,
+      tag: tag,
+      serial: serial,
+      category: cat,
+      status: "Available",
+      location: loc,
+      cost: cost,
+      purchaseDate: purchaseDate,
+      assignedTo: null,
+      colorCode: "#3b82f6",
+      history: [
+        { date: purchaseDate, action: "Asset Registered / Checked-in", user: this.currentRole }
+      ]
+    };
+    
+    // Add to assets
+    this.state.assets.unshift(newAsset);
+    
+    // Update Categories Count
+    const category = this.state.categories.find(c => c.name === cat);
+    if (category) {
+      category.count++;
+    }
+    
+    // Add Notification
+    this.state.notifications.unshift({
+      id: `NTF-${Math.floor(100 + Math.random() * 900)}`,
+      title: "Asset Registered",
+      message: `${name} has been added as ${tag}.`,
+      type: "success",
+      time: "Just now",
+      read: false
+    });
+    
+    this.saveState();
+    this.initRegistryView();
+    this.closeModal("asset-registration-modal");
+    document.getElementById("asset-registration-form").reset();
+    Toast.show("Asset Registered", `Successfully registered ${name} with tag ${tag}.`);
+  },
+
+  // Auth screen simulations
+  logout() {
+    document.getElementById("auth-screen").style.display = "flex";
+    Toast.show("Logged Out", "Session closed successfully.", "info");
+  },
+
+  login(e) {
+    e.preventDefault();
+    document.getElementById("auth-screen").style.display = "none";
+    this.init();
+    Toast.show("Welcome to AssetFlow", "Signed in successfully as Administrator.");
+  }
+};
+
+// Bootstrap App on load
+window.addEventListener("DOMContentLoaded", () => {
+  // Bind simple auth submissions
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) {
+    loginForm.addEventListener("submit", (e) => app.login(e));
+  }
+  
+  // Set default form values (today's dates)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const dateInputs = ["reg-purchase-date", "booking-start-date", "booking-end-date"];
+  dateInputs.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) input.value = todayStr;
+  });
+  
+  // Launch state
+  app.init();
+});
