@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Common System Values */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: 'Poppins', var(--font-sans);
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.15);
+  
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* HSL Base Hue Tones */
+  --hue-primary: 221;   /* Blue */
+  --hue-secondary: 172; /* Teal */
+  --hue-success: 142;   /* Green */
+  --hue-warning: 38;     /* Amber */
+  --hue-danger: 0;      /* Red */
+  
+  /* Brand Specific HSL */
+  --primary: hsl(var(--hue-primary), 83%, 53%);
+  --primary-hover: hsl(var(--hue-primary), 83%, 45%);
+  --secondary: hsl(var(--hue-secondary), 80%, 39%);
+  --success: hsl(var(--hue-success), 70%, 45%);
+  --warning: hsl(var(--hue-warning), 90%, 50%);
+  --danger: hsl(var(--hue-danger), 84%, 60%);
+  
+  /* Theme variables */
+  --bg-main: #f8fafc;
+  --bg-sidebar: #0f172a;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --border-color: #e2e8f0;
+  --border-card: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --sidebar-text: #94a3b8;
+  --sidebar-active-bg: #1e293b;
+  --sidebar-active-text: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(226, 232, 240, 0.8);
+  --glass-blur: 12px;
+  
+  --chart-grid: #e2e8f0;
+  --hover-bg: #f1f5f9;
+  --tag-bg: #f1f5f9;
+}
+
+[data-theme="dark"], .dark {
+  --bg-main: #090d16;
+  --bg-sidebar: #0b0f19;
+  --bg-card: #131926;
+  --bg-input: #1b2333;
+  --border-color: #242f47;
+  --border-card: #1f2a3f;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --sidebar-text: #64748b;
+  --sidebar-active-bg: #1c2536;
+  --sidebar-active-text: #3b82f6;
+  --glass-bg: rgba(19, 25, 38, 0.7);
+  --glass-border: rgba(36, 47, 71, 0.6);
+  --glass-blur: 16px;
+  
+  --chart-grid: #242f47;
+  --hover-bg: #1e293b;
+  --tag-bg: #1e293b;
+  
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
