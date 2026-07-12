@@ -8,7 +8,7 @@ export const exportAssetReport = async (req, res, next) => {
   const { format } = req.query; // pdf or excel
 
   try {
-    const assets = await Asset.findAll();
+    const assets = await Asset.find({ deletedAt: null });
     
     if (format === 'excel') {
       const columns = [
@@ -25,7 +25,7 @@ export const exportAssetReport = async (req, res, next) => {
         category: a.category,
         status: a.status,
         location: a.location,
-        purchaseCost: parseFloat(a.purchaseCost)
+        purchaseCost: a.purchaseCost
       }));
 
       const buffer = await generateExcelReport('Asset Report', columns, rows);
@@ -41,7 +41,7 @@ export const exportAssetReport = async (req, res, next) => {
         a.category,
         a.status,
         a.location,
-        `$${parseFloat(a.purchaseCost).toFixed(2)}`
+        `$${a.purchaseCost.toFixed(2)}`
       ]);
 
       const buffer = await generatePdfReport('Asset Registry Valuation Report', headers, rows);
@@ -58,9 +58,8 @@ export const exportMaintenanceReport = async (req, res, next) => {
   const { format } = req.query;
 
   try {
-    const tickets = await Maintenance.findAll({
-      include: [{ model: Asset, as: 'asset', attributes: ['tag', 'name'] }]
-    });
+    const tickets = await Maintenance.find({ deletedAt: null });
+    const assets = await Asset.find();
 
     if (format === 'excel') {
       const columns = [
@@ -72,15 +71,18 @@ export const exportMaintenanceReport = async (req, res, next) => {
         { header: 'Status', key: 'status' },
         { header: 'Cost ($)', key: 'cost' }
       ];
-      const rows = tickets.map(t => ({
-        id: t.id,
-        assetTag: t.asset?.tag || '—',
-        assetName: t.asset?.name || '—',
-        title: t.title,
-        priority: t.priority,
-        status: t.status,
-        cost: parseFloat(t.cost)
-      }));
+      const rows = tickets.map(t => {
+        const assetObj = assets.find(a => a.id === t.assetId);
+        return {
+          id: t.id,
+          assetTag: assetObj?.tag || '—',
+          assetName: assetObj?.name || '—',
+          title: t.title,
+          priority: t.priority,
+          status: t.status,
+          cost: t.cost
+        };
+      });
 
       const buffer = await generateExcelReport('Maintenance Spend Report', columns, rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -88,14 +90,17 @@ export const exportMaintenanceReport = async (req, res, next) => {
       return res.send(buffer);
     } else {
       const headers = ['Ticket ID', 'Asset Tag', 'Title', 'Priority', 'Status', 'Cost'];
-      const rows = tickets.map(t => [
-        t.id,
-        t.asset?.tag || '—',
-        t.title,
-        t.priority,
-        t.status,
-        `$${parseFloat(t.cost).toFixed(2)}`
-      ]);
+      const rows = tickets.map(t => {
+        const assetObj = assets.find(a => a.id === t.assetId);
+        return [
+          t.id,
+          assetObj?.tag || '—',
+          t.title,
+          t.priority,
+          t.status,
+          `$${t.cost.toFixed(2)}`
+        ];
+      });
 
       const buffer = await generatePdfReport('Asset Maintenance Spend & Downtime Report', headers, rows);
       res.setHeader('Content-Type', 'application/pdf');
@@ -106,9 +111,10 @@ export const exportMaintenanceReport = async (req, res, next) => {
     next(error);
   }
 };
+
 export const exportUserReport = async (req, res, next) => {
   try {
-    const users = await User.findAll();
+    const users = await User.find({ deletedAt: null });
     const headers = ['UID', 'Name', 'Email', 'Department', 'Role', 'Status'];
     const rows = users.map(u => [u.uid, u.name, u.email, u.department, u.roleId || 'Employee', u.status]);
     const buffer = await generatePdfReport('Corporate User Registrations Directory', headers, rows);
@@ -119,22 +125,26 @@ export const exportUserReport = async (req, res, next) => {
     next(error);
   }
 };
+
 export const exportAssignmentReport = async (req, res, next) => {
   try {
-    const assignments = await AssetAssignment.findAll({
-      include: [
-        { model: Asset, as: 'asset', attributes: ['tag'] },
-        { model: User, as: 'user', attributes: ['name'] }
-      ]
-    });
+    const assignments = await AssetAssignment.find({ deletedAt: null });
+    const assets = await Asset.find();
+    const users = await User.find();
+
     const headers = ['ID', 'Asset Tag', 'Holder', 'Issue Date', 'Status'];
-    const rows = assignments.map(a => [
-      a.id,
-      a.asset?.tag || '—',
-      a.user?.name || '—',
-      new Date(a.issueDate).toLocaleDateString(),
-      a.status
-    ]);
+    const rows = assignments.map(a => {
+      const assetObj = assets.find(as => as.id === a.assetId);
+      const userObj = users.find(u => u.uid === a.userId);
+      return [
+        a.id,
+        assetObj?.tag || '—',
+        userObj?.name || '—',
+        new Date(a.issueDate).toLocaleDateString(),
+        a.status
+      ];
+    });
+
     const buffer = await generatePdfReport('Asset Assignment Check-out Log', headers, rows);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=AssignmentReport.pdf');

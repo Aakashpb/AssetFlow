@@ -1,32 +1,26 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
 
-const ActivityLog = sequelize.define('ActivityLog', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true
-  },
+const ActivityLogSchema = new mongoose.Schema({
   userUid: {
-    type: DataTypes.STRING(50),
-    allowNull: true
+    type: String,
+    default: 'system'
   },
   userName: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    default: 'System'
   },
   action: {
-    type: DataTypes.STRING(150),
-    allowNull: false
+    type: String,
+    required: true
   },
   details: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String,
+    default: ''
   }
 }, {
-  tableName: 'activity_logs',
   timestamps: true,
-  updatedAt: false // Logs are immutable, only need createdAt
+  collection: 'activity_logs'
 });
 
+const ActivityLog = mongoose.model('ActivityLog', ActivityLogSchema);
 export default ActivityLog;

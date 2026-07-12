@@ -1,35 +1,41 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
-import Asset from './Asset.js';
-import User from './User.js';
+import mongoose from 'mongoose';
 
-const AssetAssignment = sequelize.define('AssetAssignment', {
+const AssetAssignmentSchema = new mongoose.Schema({
   id: {
-    type: DataTypes.STRING(50),
-    primaryKey: true
+    type: String,
+    required: true,
+    unique: true
+  },
+  assetId: {
+    type: String,
+    required: true
+  },
+  userId: {
+    type: String,
+    required: true
   },
   issueDate: {
-    type: DataTypes.DATE,
-    allowNull: false,
-    defaultValue: DataTypes.NOW
+    type: Date,
+    required: true,
+    default: Date.now
   },
   returnDate: {
-    type: DataTypes.DATE,
-    allowNull: true
+    type: Date,
+    default: null
   },
   status: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'Active' // Active or Returned or Transferred
+    type: String,
+    required: true,
+    default: 'Active' // Active or Returned or Transferred
+  },
+  deletedAt: {
+    type: Date,
+    default: null
   }
 }, {
-  tableName: 'asset_assignments',
   timestamps: true,
-  paranoid: true
+  collection: 'asset_assignments'
 });
 
-// Relationships
-AssetAssignment.belongsTo(Asset, { foreignKey: 'assetId', as: 'asset' });
-AssetAssignment.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
+const AssetAssignment = mongoose.model('AssetAssignment', AssetAssignmentSchema);
 export default AssetAssignment;

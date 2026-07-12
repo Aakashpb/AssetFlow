@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import User from '../models/User.js';
 import Role from '../models/Role.js';
+import PasswordReset from '../models/PasswordReset.js';
 import { logActivity } from '../utilities/logger.js';
 
 const FIREBASE_PROJECT_ID = 'assetflow-244f5';
@@ -47,18 +48,18 @@ export const register = async (req, res, next) => {
   const { name, email, department } = req.body;
 
   try {
-    const existing = await User.findOne({ where: { email } });
+    const existing = await User.findOne({ email, deletedAt: null });
     if (existing) {
-      return res.status(400).json({ error: 'User is already provisioned in MySQL.' });
+      return res.status(400).json({ error: 'User is already provisioned in MongoDB.' });
     }
 
     const uid = `user-${Date.now()}`;
-    let userRole = await Role.findOne({ where: { name: 'Employee' } });
+    let userRole = await Role.findOne({ name: 'Employee' });
     if (!userRole) {
       userRole = await Role.create({ id: 'role-emp', name: 'Employee' });
     }
 
-    const user = await User.create({
+    await User.create({
       uid,
       name,
       email,
@@ -72,7 +73,7 @@ export const register = async (req, res, next) => {
 
     await logActivity(uid, name, 'Firebase User Provisioned', `Synced user record: ${email}`);
 
-    res.status(201).json({ success: true, message: 'User provisioned in MySQL.' });
+    res.status(201).json({ success: true, message: 'User provisioned in MongoDB.' });
   } catch (error) {
     next(error);
   }
@@ -90,11 +91,7 @@ export const login = async (req, res, next) => {
     const decoded = await verifyFirebaseToken(token);
     const email = decoded.email;
 
-    const user = await User.findOne({
-      where: { email },
-      include: [{ model: Role, as: 'role' }]
-    });
-
+    const user = await User.findOne({ email, deletedAt: null });
     if (!user) {
       return res.status(404).json({ error: 'User profile not synchronized in database.' });
     }
@@ -106,6 +103,8 @@ export const login = async (req, res, next) => {
     user.lastLoginAt = new Date();
     await user.save();
 
+    const roleRecord = await Role.findOne({ id: user.roleId });
+
     await logActivity(user.uid, user.name, 'Sign In Success', `User authenticated via Firebase`);
 
     res.json({
@@ -116,7 +115,7 @@ export const login = async (req, res, next) => {
         name: user.name,
         email: user.email,
         department: user.department,
-        role: user.role?.name || 'Employee',
+        role: roleRecord?.name || 'Employee',
         avatar: user.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
         profilePicture: user.profilePicture,
         provider: user.provider
@@ -136,19 +135,15 @@ export const googleLogin = async (req, res, next) => {
     const name = decoded.name || mockName || email.split('@')[0];
     const uid = decoded.user_id || decoded.sub;
 
-    let user = await User.findOne({
-      where: { email },
-      include: [{ model: Role, as: 'role' }]
-    });
-
+    let user = await User.findOne({ email, deletedAt: null });
     const now = new Date();
 
-    if (!user) {
-      let userRole = await Role.findOne({ where: { name: 'Employee' } });
-      if (!userRole) {
-        userRole = await Role.create({ id: 'role-emp', name: 'Employee' });
-      }
+    let userRole = await Role.findOne({ name: 'Employee' });
+    if (!userRole) {
+      userRole = await Role.create({ id: 'role-emp', name: 'Employee' });
+    }
 
+    if (!user) {
       user = await User.create({
         uid,
         name,
@@ -171,6 +166,7 @@ export const googleLogin = async (req, res, next) => {
       await user.save();
     }
 
+    const roleRecord = await Role.findOne({ id: user.roleId });
     await logActivity(user.uid, user.name, 'Google Sign In Success', `SSO login synced`);
 
     res.json({
@@ -181,7 +177,7 @@ export const googleLogin = async (req, res, next) => {
         name: user.name,
         email: user.email,
         department: user.department,
-        role: user.role?.name || 'Employee',
+        role: roleRecord?.name || 'Employee',
         avatar: user.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
         profilePicture: user.profilePicture,
         provider: user.provider

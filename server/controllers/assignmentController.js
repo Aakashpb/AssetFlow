@@ -7,7 +7,7 @@ export const assignAsset = async (req, res, next) => {
   const { assetId, employeeId } = req.body;
 
   try {
-    const asset = await Asset.findByPk(assetId);
+    const asset = await Asset.findOne({ id: assetId, deletedAt: null });
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found.' });
     }
@@ -16,7 +16,7 @@ export const assignAsset = async (req, res, next) => {
       return res.status(400).json({ error: `Asset check-out failed. Asset is currently: ${asset.status}` });
     }
 
-    const employee = await User.findByPk(employeeId);
+    const employee = await User.findOne({ uid: employeeId, deletedAt: null });
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found.' });
     }
@@ -46,13 +46,15 @@ export const returnAsset = async (req, res, next) => {
   const { assetId } = req.body;
 
   try {
-    const asset = await Asset.findByPk(assetId);
+    const asset = await Asset.findOne({ id: assetId, deletedAt: null });
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found.' });
     }
 
     const activeAssignment = await AssetAssignment.findOne({
-      where: { assetId, status: 'Active' }
+      assetId,
+      status: 'Active',
+      deletedAt: null
     });
 
     if (activeAssignment) {
@@ -77,19 +79,20 @@ export const transferAsset = async (req, res, next) => {
   const { assetId, targetEmployeeId } = req.body;
 
   try {
-    const asset = await Asset.findByPk(assetId);
+    const asset = await Asset.findOne({ id: assetId, deletedAt: null });
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found.' });
     }
 
-    const targetEmployee = await User.findByPk(targetEmployeeId);
+    const targetEmployee = await User.findOne({ uid: targetEmployeeId, deletedAt: null });
     if (!targetEmployee) {
       return res.status(404).json({ error: 'Target employee not found.' });
     }
 
-    // Complete current assignment
     const activeAssignment = await AssetAssignment.findOne({
-      where: { assetId, status: 'Active' }
+      assetId,
+      status: 'Active',
+      deletedAt: null
     });
 
     if (activeAssignment) {
@@ -98,7 +101,6 @@ export const transferAsset = async (req, res, next) => {
       await activeAssignment.save();
     }
 
-    // Provision new assignment
     const id = `assign-${Date.now()}`;
     await AssetAssignment.create({
       id,
@@ -121,14 +123,21 @@ export const transferAsset = async (req, res, next) => {
 
 export const getAssignmentHistory = async (req, res, next) => {
   try {
-    const history = await AssetAssignment.findAll({
-      include: [
-        { model: Asset, as: 'asset', attributes: ['name', 'tag'] },
-        { model: User, as: 'user', attributes: ['name', 'email'] }
-      ],
-      order: [['issueDate', 'DESC']]
+    const assignments = await AssetAssignment.find({ deletedAt: null }).sort({ issueDate: -1 });
+    const assets = await Asset.find();
+    const users = await User.find();
+
+    const historyWithRefs = assignments.map(a => {
+      const assetObj = assets.find(as => as.id === a.assetId);
+      const userObj = users.find(u => u.uid === a.userId);
+      return {
+        ...a.toObject(),
+        asset: assetObj ? { name: assetObj.name, tag: assetObj.tag } : null,
+        user: userObj ? { name: userObj.name, email: userObj.email } : null
+      };
     });
-    res.json(history);
+
+    res.json(historyWithRefs);
   } catch (error) {
     next(error);
   }

@@ -1,63 +1,65 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
-import Role from './Role.js';
+import mongoose from 'mongoose';
 
-const User = sequelize.define('User', {
+const UserSchema = new mongoose.Schema({
   uid: {
-    type: DataTypes.STRING(50),
-    primaryKey: true
-  },
-  name: {
-    type: DataTypes.STRING(100),
-    allowNull: false
-  },
-  email: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
-    unique: true,
-    validate: {
-      isEmail: true
-    }
-  },
-  password: {
-    type: DataTypes.STRING(255),
-    allowNull: false
-  },
-  employeeId: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
+    type: String,
+    required: true,
     unique: true
   },
+  name: {
+    type: String,
+    required: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  employeeId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   department: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
-    defaultValue: 'IT Operations'
+    type: String,
+    required: true,
+    default: 'IT Operations'
+  },
+  roleId: {
+    type: String,
+    required: true,
+    default: 'role-emp'
   },
   status: {
-    type: DataTypes.STRING(20),
-    allowNull: false,
-    defaultValue: 'Active' // Active or Deactivated
+    type: String,
+    required: true,
+    default: 'Active' // Active or Deactivated
   },
   provider: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'Email/Password' // Email/Password or Google
+    type: String,
+    required: true,
+    default: 'Email/Password' // Email/Password or Google
   },
   profilePicture: {
-    type: DataTypes.STRING(255),
-    allowNull: true
+    type: String,
+    default: null
   },
   lastLoginAt: {
-    type: DataTypes.DATE,
-    allowNull: true
+    type: Date,
+    default: null
+  },
+  deletedAt: {
+    type: Date,
+    default: null
   }
 }, {
-  tableName: 'users',
   timestamps: true,
-  paranoid: true // Supports soft deletes
+  collection: 'users'
 });
 
-// Relationships
-User.belongsTo(Role, { foreignKey: 'roleId', as: 'role' });
-
+const User = mongoose.model('User', UserSchema);
 export default User;

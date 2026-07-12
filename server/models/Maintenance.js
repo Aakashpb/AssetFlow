@@ -1,51 +1,55 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
-import Asset from './Asset.js';
+import mongoose from 'mongoose';
 
-const Maintenance = sequelize.define('Maintenance', {
+const MaintenanceSchema = new mongoose.Schema({
   id: {
-    type: DataTypes.STRING(50),
-    primaryKey: true
+    type: String,
+    required: true,
+    unique: true
+  },
+  assetId: {
+    type: String,
+    required: true
   },
   title: {
-    type: DataTypes.STRING(150),
-    allowNull: false
+    type: String,
+    required: true
   },
   description: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String,
+    default: ''
   },
   priority: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'Medium' // Low, Medium, High
+    type: String,
+    required: true,
+    default: 'Medium' // Low, Medium, High
   },
   status: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'Backlog' // Backlog, Scheduled, In Progress, Review, Completed
+    type: String,
+    required: true,
+    default: 'Backlog' // Backlog, Scheduled, In Progress, Review, Completed
   },
   assignedTo: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    default: null
   },
   cost: {
-    type: DataTypes.DECIMAL(15, 2),
-    allowNull: false,
-    defaultValue: 0.00
+    type: Number,
+    required: true,
+    default: 0.00
   },
   downtime: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0 // In days
+    type: Number,
+    required: true,
+    default: 0 // In days
+  },
+  deletedAt: {
+    type: Date,
+    default: null
   }
 }, {
-  tableName: 'maintenance_tickets',
   timestamps: true,
-  paranoid: true
+  collection: 'maintenance_tickets'
 });
 
-// Relationships
-Maintenance.belongsTo(Asset, { foreignKey: 'assetId', as: 'asset' });
-
+const Maintenance = mongoose.model('Maintenance', MaintenanceSchema);
 export default Maintenance;

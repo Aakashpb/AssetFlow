@@ -8,17 +8,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import sequelize from './config/db.js';
+import { connectDB } from './config/db.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
-// Import Sequelize Models for Auto-Sync/Seeding
+// Import Mongoose Models for Seeding
 import Role from './models/Role.js';
 import Category from './models/Category.js';
-import User from './models/User.js';
-import Asset from './models/Asset.js';
-import AssetAssignment from './models/AssetAssignment.js';
-import Maintenance from './models/Maintenance.js';
-import Notification from './models/Notification.js';
 
 // Import Express Routes Mappings
 import authRoutes from './routes/authRoutes.js';
@@ -38,11 +33,11 @@ const PORT = process.env.PORT || 5000;
 
 // Security Hardening Middlewares
 app.use(helmet({
-  crossOriginResourcePolicy: false // Allows loading local file system uploads images directly
+  crossOriginResourcePolicy: false
 }));
 app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.use(morgan('dev')); // Dev console logging
+app.use(morgan('dev'));
 
 // Express Rate Limiter: 100 requests per 15 minutes limit
 const limiter = rateLimit({
@@ -75,48 +70,42 @@ app.use('/api/notifications', notificationRoutes);
 
 // Root Ping Handler
 app.get('/ping', (req, res) => {
-  res.json({ status: 'online', service: 'AssetFlow Production MVC API Server', ORM: 'Sequelize' });
+  res.json({ status: 'online', service: 'AssetFlow Production MVC API Server', ORM: 'Mongoose' });
 });
 
 // Centralized Express Exception Handler
 app.use(errorHandler);
 
-// Database Synchronizer & Initial Seeder Trigger
+// Database Connector & Seeder Trigger
 const initDatabase = async () => {
   try {
-    await sequelize.authenticate();
-    console.log('✅ Connection to MySQL validated successfully via Sequelize.');
+    await connectDB();
 
-    // Sync database schemas
-    await sequelize.sync({ alter: true });
-    console.log('✅ MySQL Database schemas synced successfully.');
-
-    // Seed default lookup roles if database is empty
-    const roleCount = await Role.count();
+    // Seed default lookup roles if MongoDB database is empty
+    const roleCount = await Role.countDocuments();
     if (roleCount === 0) {
-      await Role.bulkCreate([
+      await Role.create([
         { id: 'role-admin', name: 'Admin' },
         { id: 'role-mgr', name: 'Manager' },
         { id: 'role-emp', name: 'Employee' }
       ]);
-      console.log('🌱 Seeded default lookup roles: Admin, Manager, Employee.');
+      console.log('🌱 Seeded default lookup roles: Admin, Manager, Employee in MongoDB.');
     }
 
     // Seed categories
-    const categoryCount = await Category.count();
+    const categoryCount = await Category.countDocuments();
     if (categoryCount === 0) {
-      await Category.bulkCreate([
+      await Category.create([
         { id: 'cat-1', name: 'Laptops', icon: 'laptop' },
         { id: 'cat-2', name: 'Smartphones', icon: 'smartphone' },
         { id: 'cat-3', name: 'Furniture', icon: 'armchair' },
         { id: 'cat-4', name: 'Vehicles', icon: 'car' },
         { id: 'cat-5', name: 'Monitors', icon: 'monitor' }
       ]);
-      console.log('🌱 Seeded default lookup categories.');
+      console.log('🌱 Seeded default lookup categories in MongoDB.');
     }
   } catch (error) {
-    console.warn('⚠️ MySQL Auto-migration / Connection Failed:', error.message);
-    console.log('Sequelize operations will require MySQL database active to run correctly.');
+    console.warn('⚠️ MongoDB Initial Seeder Failed:', error.message);
   }
 };
 
@@ -131,4 +120,4 @@ if (process.env.NODE_ENV !== 'test') {
   await initDatabase();
 }
 
-export default app; // For integration testing triggers
+export default app;

@@ -4,11 +4,19 @@ import { logActivity } from '../utilities/logger.js';
 
 export const getAllUsers = async (req, res, next) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] },
-      include: [{ model: Role, as: 'role' }]
+    const users = await User.find({ deletedAt: null }).select('-password');
+    const roles = await Role.find();
+    
+    // Map role details to users
+    const usersWithRoles = users.map(user => {
+      const roleRecord = roles.find(r => r.id === user.roleId);
+      return {
+        ...user.toObject(),
+        role: roleRecord ? { name: roleRecord.name } : { name: 'Employee' }
+      };
     });
-    res.json(users);
+    
+    res.json(usersWithRoles);
   } catch (error) {
     next(error);
   }
@@ -16,16 +24,16 @@ export const getAllUsers = async (req, res, next) => {
 
 export const getProfile = async (req, res, next) => {
   try {
-    const user = await User.findByPk(req.user.uid, {
-      attributes: { exclude: ['password'] },
-      include: [{ model: Role, as: 'role' }]
-    });
-
+    const user = await User.findOne({ uid: req.user.uid, deletedAt: null }).select('-password');
     if (!user) {
       return res.status(404).json({ error: 'User profile not found.' });
     }
 
-    res.json(user);
+    const roleRecord = await Role.findOne({ id: user.roleId });
+    res.json({
+      ...user.toObject(),
+      role: roleRecord ? { name: roleRecord.name } : { name: 'Employee' }
+    });
   } catch (error) {
     next(error);
   }
@@ -35,7 +43,7 @@ export const updateProfile = async (req, res, next) => {
   const { name, department } = req.body;
 
   try {
-    const user = await User.findByPk(req.user.uid);
+    const user = await User.findOne({ uid: req.user.uid, deletedAt: null });
     if (!user) {
       return res.status(404).json({ error: 'User profile not found.' });
     }
@@ -58,7 +66,7 @@ export const uploadProfilePic = async (req, res, next) => {
       return res.status(400).json({ error: 'Please upload an image file.' });
     }
 
-    const user = await User.findByPk(req.user.uid);
+    const user = await User.findOne({ uid: req.user.uid, deletedAt: null });
     if (!user) {
       return res.status(404).json({ error: 'User profile not found.' });
     }
@@ -80,7 +88,7 @@ export const toggleUserStatus = async (req, res, next) => {
   const { status } = req.body; // Active or Deactivated
 
   try {
-    const user = await User.findByPk(uid);
+    const user = await User.findOne({ uid, deletedAt: null });
     if (!user) {
       return res.status(404).json({ error: 'User profile not found.' });
     }
@@ -100,12 +108,13 @@ export const deleteUser = async (req, res, next) => {
   const { uid } = req.params;
 
   try {
-    const user = await User.findByPk(uid);
+    const user = await User.findOne({ uid, deletedAt: null });
     if (!user) {
       return res.status(404).json({ error: 'User profile not found.' });
     }
 
-    await user.destroy(); // Soft delete active user
+    user.deletedAt = new Date(); // Soft delete Mongoose model
+    await user.save();
 
     await logActivity(req.user.uid, req.user.name, 'User Deletion Event', `Soft deleted user profile UID: ${uid}`);
 

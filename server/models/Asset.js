@@ -1,78 +1,83 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
 
-const Asset = sequelize.define('Asset', {
+const AssetSchema = new mongoose.Schema({
   id: {
-    type: DataTypes.STRING(50),
-    primaryKey: true
+    type: String,
+    required: true,
+    unique: true
   },
   tag: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true
   },
   name: {
-    type: DataTypes.STRING(100),
-    allowNull: false
+    type: String,
+    required: true
   },
   category: {
-    type: DataTypes.STRING(100),
-    allowNull: false
+    type: String,
+    required: true
   },
   brand: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    default: ''
   },
   model: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    default: ''
   },
   serialNumber: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: String,
+    default: ''
   },
   purchaseDate: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
+    type: String,
+    required: true
   },
   purchaseCost: {
-    type: DataTypes.DECIMAL(15, 2),
-    allowNull: false
+    type: Number,
+    required: true,
+    default: 0.00
   },
   warrantyExpiry: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
+    type: String,
+    required: true
   },
   status: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'Available' // Available, Allocated, Maintenance, Retired, Lost, Damaged
+    type: String,
+    required: true,
+    default: 'Available' // Available, Allocated, Maintenance, Retired, Lost, Damaged
   },
   location: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
-    defaultValue: 'Staging Lab'
+    type: String,
+    required: true,
+    default: 'Staging Lab'
   },
   assignedTo: {
-    type: DataTypes.STRING(50), // UID of user or employee
-    allowNull: true
+    type: String,
+    default: null
   },
   description: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String,
+    default: ''
   },
   qrCode: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    type: String,
+    default: null
   },
   assetImage: {
-    type: DataTypes.STRING(255),
-    allowNull: true
+    type: String,
+    default: null
+  },
+  deletedAt: {
+    type: Date,
+    default: null
   }
 }, {
-  tableName: 'assets',
   timestamps: true,
-  paranoid: true
+  collection: 'assets'
 });
 
+const Asset = mongoose.model('Asset', AssetSchema);
 export default Asset;

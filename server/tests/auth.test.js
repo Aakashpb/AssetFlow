@@ -1,11 +1,11 @@
 import request from 'supertest';
 import app from '../server.js';
-import sequelize from '../config/db.js';
+import mongoose from '../config/db.js';
 
 describe('AssetFlow MVC Server Endpoint Tests', () => {
   // Gracefully close database connection pool after all tests
   afterAll(async () => {
-    await sequelize.close();
+    await mongoose.disconnect();
   });
 
   describe('GET /ping', () => {

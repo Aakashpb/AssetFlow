@@ -1,4 +1,3 @@
-import { Op } from 'sequelize';
 import Asset from '../models/Asset.js';
 import User from '../models/User.js';
 import Role from '../models/Role.js';
@@ -9,47 +8,46 @@ export const getAllAssets = async (req, res, next) => {
   const { search, category, status, sortBy, sortOrder, page = 1, limit = 10 } = req.query;
 
   try {
-    const whereClause = {};
+    const query = { deletedAt: null };
 
-    // Search filter
+    // Search query regexp matches
     if (search) {
-      whereClause[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { tag: { [Op.like]: `%${search}%` } },
-        { brand: { [Op.like]: `%${search}%` } },
-        { model: { [Op.like]: `%${search}%` } },
-        { serialNumber: { [Op.like]: `%${search}%` } }
+      const regex = new RegExp(search, 'i');
+      query.$or = [
+        { name: regex },
+        { tag: regex },
+        { brand: regex },
+        { model: regex },
+        { serialNumber: regex }
       ];
     }
 
-    // Category and status exact filters
-    if (category) whereClause.category = category;
-    if (status) whereClause.status = status;
+    if (category) query.category = category;
+    if (status) query.status = status;
 
-    // Sorting parameters
-    const orderClause = [];
+    // Sorting clauses
+    const sort = {};
     if (sortBy) {
-      orderClause.push([sortBy, sortOrder === 'desc' ? 'DESC' : 'ASC']);
+      sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
     } else {
-      orderClause.push(['createdAt', 'DESC']);
+      sort.createdAt = -1;
     }
 
-    // Pagination calculations
+    const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
-    const offsetNum = (parseInt(page) - 1) * limitNum;
+    const skipNum = (pageNum - 1) * limitNum;
 
-    const { count, rows } = await Asset.findAndCountAll({
-      where: whereClause,
-      order: orderClause,
-      limit: limitNum,
-      offset: offsetNum
-    });
+    const count = await Asset.countDocuments(query);
+    const rows = await Asset.find(query)
+      .sort(sort)
+      .skip(skipNum)
+      .limit(limitNum);
 
     res.json({
       success: true,
       totalItems: count,
       totalPages: Math.ceil(count / limitNum),
-      currentPage: parseInt(page),
+      currentPage: pageNum,
       assets: rows
     });
   } catch (error) {
@@ -61,7 +59,7 @@ export const getAssetById = async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const asset = await Asset.findByPk(id);
+    const asset = await Asset.findOne({ id, deletedAt: null });
     if (!asset) {
       return res.status(404).json({ error: 'Asset profile not found.' });
     }
@@ -75,7 +73,7 @@ export const createAsset = async (req, res, next) => {
   const { tag, name, category, brand, model, serialNumber, purchaseDate, purchaseCost, warrantyExpiry, location, description, assignedTo } = req.body;
 
   try {
-    const existing = await Asset.findOne({ where: { tag } });
+    const existing = await Asset.findOne({ tag, deletedAt: null });
     if (existing) {
       return res.status(400).json({ error: `Asset Tag ID ${tag} is already registered.` });
     }
@@ -98,7 +96,7 @@ export const createAsset = async (req, res, next) => {
       model,
       serialNumber,
       purchaseDate,
-      purchaseCost,
+      purchaseCost: Number(purchaseCost),
       warrantyExpiry,
       status: assignedTo ? 'Allocated' : 'Available',
       location: location || 'Staging Lab',
@@ -121,7 +119,7 @@ export const updateAsset = async (req, res, next) => {
   const { tag, name, category, brand, model, serialNumber, purchaseDate, purchaseCost, warrantyExpiry, status, location, assignedTo, description, logAction } = req.body;
 
   try {
-    const asset = await Asset.findByPk(id);
+    const asset = await Asset.findOne({ id, deletedAt: null });
     if (!asset) {
       return res.status(404).json({ error: 'Asset profile not found.' });
     }
@@ -131,22 +129,22 @@ export const updateAsset = async (req, res, next) => {
       imagePath = `/uploads/asset_images/${req.file.filename}`;
     }
 
-    await asset.update({
-      tag: tag !== undefined ? tag : asset.tag,
-      name: name !== undefined ? name : asset.name,
-      category: category !== undefined ? category : asset.category,
-      brand: brand !== undefined ? brand : asset.brand,
-      model: model !== undefined ? model : asset.model,
-      serialNumber: serialNumber !== undefined ? serialNumber : asset.serialNumber,
-      purchaseDate: purchaseDate !== undefined ? purchaseDate : asset.purchaseDate,
-      purchaseCost: purchaseCost !== undefined ? purchaseCost : asset.purchaseCost,
-      warrantyExpiry: warrantyExpiry !== undefined ? warrantyExpiry : asset.warrantyExpiry,
-      status: status !== undefined ? status : asset.status,
-      location: location !== undefined ? location : asset.location,
-      assignedTo: assignedTo !== undefined ? assignedTo : asset.assignedTo,
-      description: description !== undefined ? description : asset.description,
-      assetImage: imagePath
-    });
+    asset.tag = tag !== undefined ? tag : asset.tag;
+    asset.name = name !== undefined ? name : asset.name;
+    asset.category = category !== undefined ? category : asset.category;
+    asset.brand = brand !== undefined ? brand : asset.brand;
+    asset.model = model !== undefined ? model : asset.model;
+    asset.serialNumber = serialNumber !== undefined ? serialNumber : asset.serialNumber;
+    asset.purchaseDate = purchaseDate !== undefined ? purchaseDate : asset.purchaseDate;
+    asset.purchaseCost = purchaseCost !== undefined ? Number(purchaseCost) : asset.purchaseCost;
+    asset.warrantyExpiry = warrantyExpiry !== undefined ? warrantyExpiry : asset.warrantyExpiry;
+    asset.status = status !== undefined ? status : asset.status;
+    asset.location = location !== undefined ? location : asset.location;
+    asset.assignedTo = assignedTo !== undefined ? assignedTo : asset.assignedTo;
+    asset.description = description !== undefined ? description : asset.description;
+    asset.assetImage = imagePath;
+
+    await asset.save();
 
     if (logAction) {
       await logActivity(req.user.uid, req.user.name, 'Asset Modification Event', `${logAction} on Asset ID: ${id}`);
@@ -162,12 +160,13 @@ export const deleteAsset = async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const asset = await Asset.findByPk(id);
+    const asset = await Asset.findOne({ id, deletedAt: null });
     if (!asset) {
       return res.status(404).json({ error: 'Asset profile not found.' });
     }
 
-    await asset.destroy(); // Soft delete database record
+    asset.deletedAt = new Date(); // Soft delete Mongoose model
+    await asset.save();
 
     await logActivity(req.user.uid, req.user.name, 'Asset Deletion Event', `Soft-deleted Asset ID: ${id}`);
 
@@ -179,9 +178,18 @@ export const deleteAsset = async (req, res, next) => {
 
 export const getCatalogs = async (req, res, next) => {
   try {
-    const users = await User.findAll({
-      attributes: ['uid', 'name', 'email', 'department'],
-      include: [{ model: Role, as: 'role' }]
+    const users = await User.find({ deletedAt: null });
+    const roles = await Role.find();
+
+    const employeesMap = users.map(u => {
+      const roleRecord = roles.find(r => r.id === u.roleId);
+      return {
+        id: u.uid,
+        name: u.name,
+        email: u.email,
+        department: u.department,
+        role: roleRecord?.name || 'Employee'
+      };
     });
 
     const categories = [
@@ -201,7 +209,7 @@ export const getCatalogs = async (req, res, next) => {
     ];
 
     res.json({
-      employees: users.map(u => ({ id: u.uid, name: u.name, email: u.email, department: u.department, role: u.role?.name || 'Employee' })),
+      employees: employeesMap,
       categories,
       departments
     });

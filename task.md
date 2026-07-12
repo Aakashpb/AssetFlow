@@ -1,8 +1,9 @@
-# Firebase Integration Checklist
+# MongoDB Backend Migration Checklist
 
-- [x] Install dependencies (`firebase` on frontend, `jwks-rsa` on backend)
-- [x] Create `src/config/firebase.js` with Firebase configuration parameters
-- [x] Modify `src/context/AuthContext.jsx` to wire sign-in/register/SSO with Firebase Auth
-- [x] Update backend `authMiddleware.js` to fetch and verify Google certificates signatures
-- [x] Update backend `authController.js` to handle dynamic user profile syncing with MySQL
-- [x] Execute tests and compile verify checkouts
+- [x] Install `mongoose` and uninstall `sequelize`/`mysql2` on backend
+- [x] Configure `server/.env` with `MONGODB_URI` connection string
+- [x] Rewrite `server/config/db.js` to connect via Mongoose
+- [x] Implement Mongoose Schemas in `server/models/`
+- [x] Update MVC Controllers to execute Mongoose queries
+- [x] Update `server/server.js` database initialization and seeding scripts
+- [x] Execute Jest tests and perform client compilation verify checks
